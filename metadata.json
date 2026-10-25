@@ -1,0 +1,6 @@
+{
+  "name": "StyleMorph",
+  "description": "Scans photo library, automatically curates best photos, and creates AI style variations with drag-and-drop batch editing, multi-provider support, and cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
