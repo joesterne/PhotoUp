@@ -31,13 +31,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,14 +63,20 @@ fun PhotoCard(
     isSelected: Boolean,
     onToggleSelect: () -> Unit,
     onInspect: () -> Unit,
-    onDragStart: (PhotoItem) -> Unit,
+    onDragStart: (PhotoItem, Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var cardBoundsInWindow by remember { mutableStateOf(Rect.Zero) }
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
+            .onGloballyPositioned { coordinates ->
+                cardBoundsInWindow = coordinates.boundsInWindow()
+            }
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
                 color = if (isSelected) PrimaryViolet else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
@@ -70,10 +84,15 @@ fun PhotoCard(
             )
             .pointerInput(photo.id) {
                 detectDragGesturesAfterLongPress(
-                    onDragStart = { onDragStart(photo) },
+                    onDragStart = { localOffset ->
+                        onDragStart(photo, cardBoundsInWindow.topLeft + localOffset)
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount)
+                    },
                     onDragEnd = { onDragEnd() },
-                    onDragCancel = { onDragEnd() },
-                    onDrag = { _, _ -> }
+                    onDragCancel = { onDragEnd() }
                 )
             }
             .clickable { onToggleSelect() }

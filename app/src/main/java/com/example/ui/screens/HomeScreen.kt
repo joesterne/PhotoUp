@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
@@ -78,13 +79,17 @@ import androidx.compose.ui.unit.sp
 import com.example.data.PhotoItem
 import com.example.data.VariationResult
 import com.example.ui.components.AIProviderSheet
+import com.example.ui.components.BatchQueueDropShelf
 import com.example.ui.components.BeforeAfterCompareDialog
+import com.example.ui.components.CameraCaptureDialog
 import com.example.ui.components.DragDropBatchTarget
 import com.example.ui.components.GlobalProgressBar
 import com.example.ui.components.PhotoCard
 import com.example.ui.components.StorageSettingsSheet
 import com.example.ui.components.StyleCard
 import com.example.ui.components.VariationCard
+import com.example.ui.dragdrop.DragGhostOverlay
+import com.example.ui.dragdrop.rememberDragDropState
 import com.example.ui.theme.AccentAmber
 import com.example.ui.theme.AccentEmerald
 import com.example.ui.theme.PrimaryViolet
@@ -124,7 +129,11 @@ fun HomeScreen(
     // Sheet / Dialog states
     var showAIProviderSheet by remember { mutableStateOf(false) }
     var showStorageSheet by remember { mutableStateOf(false) }
+    var showCameraCapture by remember { mutableStateOf(false) }
     var inspectVariation by remember { mutableStateOf<VariationResult?>(null) }
+
+    val dragDropState = rememberDragDropState()
+    val queuedPhotos = photos.filter { selectedIds.contains(it.id) }
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("Photo Library", "Styles", "Variations (${variations.size})", "Batch Queue")
@@ -147,8 +156,9 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {
@@ -284,17 +294,17 @@ fun HomeScreen(
                 onCancel = { viewModel.cancelBatchProcessing() }
             )
 
-            // Drag and Drop Batch Target Dock
-            DragDropBatchTarget(
-                selectedCount = selectedIds.size,
+            // Interactive Visual Drag-and-Drop Batch Shelf
+            BatchQueueDropShelf(
+                queuedPhotos = queuedPhotos,
                 selectedStyle = selectedStyle,
-                draggedPhoto = draggedPhoto,
-                draggedStyle = draggedStyle,
-                onDropPhoto = { photo -> viewModel.dropPhotoOntoBatchZone(photo) },
-                onDropStyle = { style -> viewModel.dropStyleOntoBatchZone(style) },
-                onStartBatch = {
+                dragDropState = dragDropState,
+                onRemoveFromQueue = { photoId -> viewModel.removeFromQueue(photoId) },
+                onReorderQueue = { from, to -> viewModel.reorderQueue(from, to) },
+                onStartPipeline = {
                     viewModel.startBatchProcessing(selectedIds.toList(), selectedStyle)
                 },
+                onClearQueue = { viewModel.clearSelection() },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
             )
 
@@ -355,7 +365,23 @@ fun HomeScreen(
                                 Text(text = "Auto-Pick Best", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
 
-                            Row {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = { showCameraCapture = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SecondaryCyan),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.testTag("capture_camera_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PhotoCamera,
+                                        contentDescription = "Capture Photo",
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = "Capture", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                }
+
                                 OutlinedButton(
                                     onClick = {
                                         photoPickerLauncher.launch(
@@ -373,8 +399,6 @@ fun HomeScreen(
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(text = "Scan", fontSize = 12.sp)
                                 }
-
-                                Spacer(modifier = Modifier.width(6.dp))
 
                                 OutlinedButton(
                                     onClick = {
@@ -435,8 +459,32 @@ fun HomeScreen(
                                     isSelected = selectedIds.contains(photo.id),
                                     onToggleSelect = { viewModel.togglePhotoSelection(photo.id) },
                                     onInspect = { viewModel.togglePhotoSelection(photo.id) },
-                                    onDragStart = { p -> viewModel.setDraggedPhoto(p) },
-                                    onDragEnd = { viewModel.setDraggedPhoto(null) }
+                                    onDragStart = { p, offset ->
+                                        viewModel.setDraggedPhoto(p)
+                                        dragDropState.startDragging(p, offset)
+                                    },
+                                    onDrag = { dragAmount ->
+                                        dragDropState.onDrag(dragAmount)
+                                    },
+                                    onDragEnd = {
+                                        val dropTargetId = dragDropState.stopDragging()
+                                        val currentDragged = viewModel.draggedPhoto.value
+                                        viewModel.setDraggedPhoto(null)
+                                        if (currentDragged != null && dropTargetId != null) {
+                                            when (dropTargetId) {
+                                                "target_queue_drop" -> {
+                                                    viewModel.dropPhotoOntoBatchZone(currentDragged)
+                                                }
+                                                "target_direct_process" -> {
+                                                    viewModel.dropPhotoOntoBatchZone(currentDragged)
+                                                    viewModel.startBatchProcessing(
+                                                        (selectedIds + currentDragged.id).toList(),
+                                                        selectedStyle
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -734,5 +782,20 @@ fun HomeScreen(
                 inspectVariation = null
             }
         )
+    }
+
+    // In-app CameraX Capture Dialog
+    if (showCameraCapture) {
+        CameraCaptureDialog(
+            onDismiss = { showCameraCapture = false },
+            onPhotoCaptured = { uri ->
+                showCameraCapture = false
+                viewModel.addCapturedPhoto(uri)
+            }
+        )
+    }
+
+    // Floating drag ghost avatar tracking touch across the screen
+    DragGhostOverlay(dragDropState = dragDropState)
     }
 }

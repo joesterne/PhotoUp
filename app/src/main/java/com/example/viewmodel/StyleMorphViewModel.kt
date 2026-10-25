@@ -173,6 +173,36 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
+     * Adds photo captured directly via in-app CameraX capture.
+     */
+    fun addCapturedPhoto(uri: Uri) {
+        val current = _photos.value.toMutableList()
+        val id = "camera_capture_${System.currentTimeMillis()}"
+        val title = "Captured Photo #${current.size + 1}"
+        val aesthetic = (0.91f + (Math.random() * 0.08f)).toFloat().coerceIn(0.88f, 0.99f)
+
+        val photoItem = PhotoItem(
+            id = id,
+            title = title,
+            uriString = uri.toString(),
+            category = "Camera",
+            aestheticScore = aesthetic,
+            sharpnessScore = 0.95f,
+            lightingScore = 0.93f,
+            dynamicRangeScore = 0.92f,
+            dateAdded = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date()),
+            isAutoSelected = true,
+            sampleGradientStart = 0xFFEC4899,
+            sampleGradientEnd = 0xFF8B5CF6,
+            samplePatternType = "portrait"
+        )
+        current.add(0, photoItem)
+        _photos.value = current
+        _selectedPhotoIds.value = _selectedPhotoIds.value + id
+        showSnackbar("📸 Captured photo added to library & selected for AI processing!")
+    }
+
+    /**
      * Drag and drop handlers
      */
     fun setDraggedPhoto(photo: PhotoItem?) {
@@ -188,6 +218,21 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
         current.add(photo.id)
         _selectedPhotoIds.value = current
         showSnackbar("Added '${photo.title}' to batch queue!")
+    }
+
+    fun removeFromQueue(photoId: String) {
+        val current = _selectedPhotoIds.value.toMutableSet()
+        current.remove(photoId)
+        _selectedPhotoIds.value = current
+    }
+
+    fun reorderQueue(fromIndex: Int, toIndex: Int) {
+        val list = _selectedPhotoIds.value.toList().toMutableList()
+        if (fromIndex in list.indices && toIndex in list.indices) {
+            val item = list.removeAt(fromIndex)
+            list.add(toIndex, item)
+            _selectedPhotoIds.value = LinkedHashSet(list)
+        }
     }
 
     fun dropStyleOntoBatchZone(style: StylePreset) {
