@@ -125,6 +125,32 @@ data class VariationResult(
 )
 
 /**
+ * Status stages for an individual item in the batch processing queue.
+ */
+enum class QueueItemStage {
+    QUEUED,
+    TRANSFORMING,
+    UPLOADING,
+    COMPLETED,
+    FAILED
+}
+
+/**
+ * Tracks transformation and upload progress for an individual item in the queue.
+ */
+data class QueueItemProgress(
+    val photoId: String,
+    val photoTitle: String,
+    val uriString: String? = null,
+    val sampleGradientStart: Long = 0xFF7C3AED,
+    val sampleGradientEnd: Long = 0xFF06B6D4,
+    val stage: QueueItemStage = QueueItemStage.QUEUED,
+    val transformProgress: Float = 0f,
+    val uploadProgress: Float = 0f,
+    val statusText: String = "Waiting in queue"
+)
+
+/**
  * Active processing task for determinate and ongoing progress tracking.
  */
 data class BatchTask(
@@ -136,7 +162,10 @@ data class BatchTask(
     val completedItems: Int,
     val currentPhotoTitle: String,
     val currentStepDescription: String,
-    val progress: Float, // 0.0f .. 1.0f
+    val progress: Float = 0f, // overall combined 0.0f .. 1.0f
+    val transformProgress: Float = 0f, // 0.0f .. 1.0f for style transformation stage
+    val uploadProgress: Float = 0f, // 0.0f .. 1.0f for cloud storage upload stage
+    val queueItemStates: List<QueueItemProgress> = emptyList(),
     val isRunning: Boolean,
     val isCancelled: Boolean = false,
     val startTime: Long = System.currentTimeMillis()

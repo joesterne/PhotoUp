@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,8 +32,10 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
@@ -41,12 +44,14 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -56,6 +61,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -66,6 +72,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,12 +86,15 @@ import androidx.compose.ui.unit.sp
 import com.example.data.PhotoItem
 import com.example.data.VariationResult
 import com.example.ui.components.AIProviderSheet
+import com.example.ui.components.BatchProcessingStatusBar
 import com.example.ui.components.BatchQueueDropShelf
 import com.example.ui.components.BeforeAfterCompareDialog
 import com.example.ui.components.CameraCaptureDialog
+import com.example.ui.components.CircularProgressGauge
 import com.example.ui.components.DragDropBatchTarget
 import com.example.ui.components.GlobalProgressBar
 import com.example.ui.components.PhotoCard
+import com.example.ui.components.SettingsDrawerContent
 import com.example.ui.components.StorageSettingsSheet
 import com.example.ui.components.StyleCard
 import com.example.ui.components.VariationCard
@@ -96,6 +106,7 @@ import com.example.ui.theme.PrimaryViolet
 import com.example.ui.theme.PrimaryVioletLight
 import com.example.ui.theme.SecondaryCyan
 import com.example.viewmodel.StyleMorphViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,6 +124,9 @@ fun HomeScreen(
     // Task and Progress
     val isProcessing by viewModel.isProcessing.collectAsState()
     val progressFraction by viewModel.progressFraction.collectAsState()
+    val transformProgress by viewModel.transformProgress.collectAsState()
+    val uploadProgress by viewModel.uploadProgress.collectAsState()
+    val queueItemStates by viewModel.queueItemStates.collectAsState()
     val progressTitle by viewModel.progressTitle.collectAsState()
     val progressSubtitle by viewModel.progressSubtitle.collectAsState()
     val activeTask by viewModel.activeBatchTask.collectAsState()
@@ -131,6 +145,13 @@ fun HomeScreen(
     var showStorageSheet by remember { mutableStateOf(false) }
     var showCameraCapture by remember { mutableStateOf(false) }
     var inspectVariation by remember { mutableStateOf<VariationResult?>(null) }
+
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+
+    BackHandler(enabled = drawerState.isOpen) {
+        coroutineScope.launch { drawerState.close() }
+    }
 
     val dragDropState = rememberDragDropState()
     val queuedPhotos = photos.filter { selectedIds.contains(it.id) }
@@ -157,11 +178,47 @@ fun HomeScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                SettingsDrawerContent(
+                    aiConfig = aiConfig,
+                    storageConfig = storageConfig,
+                    onOpenAIProviderSettings = { showAIProviderSheet = true },
+                    onOpenStorageSettings = { showStorageSheet = true },
+                    onLaunchCamera = { showCameraCapture = true },
+                    onScanLibrary = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onAutoCurate = { viewModel.autoCuratePhotos() },
+                    onSyncAllCloud = { viewModel.syncAllUnsyncedToCloud() },
+                    onClose = { coroutineScope.launch { drawerState.close() } }
+                )
+            }
+        ) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                topBar = {
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        if (drawerState.isClosed) drawerState.open() else drawerState.close()
+                                    }
+                                },
+                                modifier = Modifier.testTag("hamburger_settings_menu_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = "Settings Menu",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -285,12 +342,14 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Ongoing Progress Bar - Pinned at top of workspace
-            GlobalProgressBar(
+            // Batch processing status bar with animated circular indicators for transform & upload
+            BatchProcessingStatusBar(
                 isVisible = isProcessing,
                 title = progressTitle,
                 subtitle = progressSubtitle,
-                progressFraction = progressFraction,
+                transformProgress = transformProgress,
+                uploadProgress = uploadProgress,
+                queueItems = queueItemStates,
                 onCancel = { viewModel.cancelBatchProcessing() }
             )
 
@@ -696,7 +755,38 @@ fun HomeScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
 
-                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Dual Circular Progress Gauges in Tab 4
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CircularProgressGauge(
+                                            label = "AI Transform",
+                                            progress = transformProgress,
+                                            color = PrimaryVioletLight,
+                                            trackColor = PrimaryViolet.copy(alpha = 0.2f),
+                                            icon = Icons.Default.AutoAwesome,
+                                            testTag = "tab_transform_gauge"
+                                        )
+
+                                        CircularProgressGauge(
+                                            label = "Cloud Sync",
+                                            progress = uploadProgress,
+                                            color = SecondaryCyan,
+                                            trackColor = SecondaryCyan.copy(alpha = 0.2f),
+                                            icon = Icons.Default.CloudUpload,
+                                            testTag = "tab_upload_gauge"
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
                                     Text(
                                         text = "Completed ${activeTask?.completedItems} of ${activeTask?.totalItems}",
                                         style = MaterialTheme.typography.labelSmall
@@ -797,5 +887,6 @@ fun HomeScreen(
 
     // Floating drag ghost avatar tracking touch across the screen
     DragGhostOverlay(dragDropState = dragDropState)
+        }
     }
 }

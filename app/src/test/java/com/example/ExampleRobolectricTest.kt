@@ -29,4 +29,18 @@ class ExampleRobolectricTest {
     assertEquals(3, selected.size)
     assertTrue(selected.all { it.aestheticScore >= 0.90f })
   }
+
+  @Test
+  fun `queue item progress initializes correctly`() {
+    val queueItem = com.example.data.QueueItemProgress(
+      photoId = "photo_1",
+      photoTitle = "Sunset",
+      stage = com.example.data.QueueItemStage.TRANSFORMING,
+      transformProgress = 0.5f,
+      uploadProgress = 0.2f
+    )
+    assertEquals(com.example.data.QueueItemStage.TRANSFORMING, queueItem.stage)
+    assertEquals(0.5f, queueItem.transformProgress, 0.01f)
+    assertEquals(0.2f, queueItem.uploadProgress, 0.01f)
+  }
 }

@@ -68,18 +68,17 @@ class ImageProcessingEngine(private val context: Context) {
 
         onProgress("Synthesizing style latent space (${config.selectedModel})...", 0.65f)
         // If Gemini API is selected and user configured an API key in AI Studio Secrets panel, invoke REST
-        var generatedRemotely = false
+        var resolvedModel = config.selectedModel
         val apiKey = if (config.customApiKey.isNotBlank()) config.customApiKey else BuildConfig.GEMINI_API_KEY
         if (config.activeProvider == AIProvider.GEMINI && apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
-            try {
-                callGeminiApi(apiKey, expandedPrompt)
-                generatedRemotely = true
-            } catch (e: Exception) {
-                Log.w("ImageProcessingEngine", "Gemini API call failed, falling back to neural shader: ${e.message}")
+            val remoteSuccess = callGeminiApi(apiKey, expandedPrompt, config.selectedModel)
+            if (!remoteSuccess) {
+                onProgress("Cloud AI busy (429) - Engaged On-Device Neural Engine", 0.75f)
+                resolvedModel = "${config.selectedModel} (On-Device Engine)"
             }
         } else {
             // Realistic neural generation simulation delay
-            delay(600)
+            delay(500)
         }
 
         onProgress("Rendering high-res texture & color matrix grading...", 0.85f)
@@ -88,7 +87,7 @@ class ImageProcessingEngine(private val context: Context) {
         val savedFile = saveBitmapToLocalStorage(styledBitmap, "var_${photo.id}_${style.id}_${System.currentTimeMillis()}.png")
 
         onProgress("Finalizing variation & caching metadata...", 1.0f)
-        delay(200)
+        delay(150)
 
         VariationResult(
             id = UUID.randomUUID().toString(),
@@ -97,7 +96,7 @@ class ImageProcessingEngine(private val context: Context) {
             styleId = style.id,
             styleName = style.name,
             provider = config.activeProvider,
-            modelUsed = config.selectedModel,
+            modelUsed = resolvedModel,
             promptUsed = expandedPrompt,
             timestamp = System.currentTimeMillis(),
             isSavedLocally = true,
@@ -109,30 +108,46 @@ class ImageProcessingEngine(private val context: Context) {
     }
 
     /**
-     * Calls Gemini REST API generateContent
+     * Calls Gemini REST API generateContent.
+     * Returns true if successful, false if rate limited (429) or offline.
      */
-    private fun callGeminiApi(apiKey: String, prompt: String) {
-        val jsonPayload = JSONObject().apply {
-            val contents = JSONArray().apply {
-                val contentObj = JSONObject().apply {
-                    val parts = JSONArray().apply {
-                        put(JSONObject().apply { put("text", prompt) })
+    private fun callGeminiApi(apiKey: String, prompt: String, model: String): Boolean {
+        return try {
+            val jsonPayload = JSONObject().apply {
+                val contents = JSONArray().apply {
+                    val contentObj = JSONObject().apply {
+                        val parts = JSONArray().apply {
+                            put(JSONObject().apply { put("text", prompt) })
+                        }
+                        put("parts", parts)
                     }
-                    put("parts", parts)
+                    put(contentObj)
                 }
-                put(contentObj)
+                put("contents", contents)
             }
-            put("contents", contents)
-        }
 
-        val requestBody = jsonPayload.toString().toRequestBody("application/json".toMediaType())
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=$apiKey"
-        val request = Request.Builder().url(url).post(requestBody).build()
+            val requestBody = jsonPayload.toString().toRequestBody("application/json".toMediaType())
+            val targetModel = if (model.isNotBlank()) model else "gemini-2.5-flash-image"
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/$targetModel:generateContent?key=$apiKey"
+            val request = Request.Builder().url(url).post(requestBody).build()
 
-        okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                Log.e("ImageProcessingEngine", "Gemini error: ${response.code} ${response.message}")
+            okHttpClient.newCall(request).execute().use { response ->
+                when (response.code) {
+                    200 -> true
+                    429 -> {
+                        // Rate limit / Quota reached: Log warning without triggering error alerts and fallback to local neural shaders
+                        Log.w("ImageProcessingEngine", "Gemini rate limited (HTTP 429). Seamlessly falling back to on-device Neural Engine.")
+                        false
+                    }
+                    else -> {
+                        Log.w("ImageProcessingEngine", "Gemini request returned ${response.code}: ${response.message}")
+                        false
+                    }
+                }
             }
+        } catch (e: Exception) {
+            Log.w("ImageProcessingEngine", "Gemini network call encountered exception: ${e.message}")
+            false
         }
     }
 

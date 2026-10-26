@@ -8,6 +8,8 @@ import com.example.data.AIProvider
 import com.example.data.AIProviderConfig
 import com.example.data.BatchTask
 import com.example.data.PhotoItem
+import com.example.data.QueueItemProgress
+import com.example.data.QueueItemStage
 import com.example.data.SamplePhotoLibrary
 import com.example.data.StorageConfig
 import com.example.data.StylePreset
@@ -59,6 +61,15 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _progressFraction = MutableStateFlow(0f)
     val progressFraction: StateFlow<Float> = _progressFraction.asStateFlow()
+
+    private val _transformProgress = MutableStateFlow(0f)
+    val transformProgress: StateFlow<Float> = _transformProgress.asStateFlow()
+
+    private val _uploadProgress = MutableStateFlow(0f)
+    val uploadProgress: StateFlow<Float> = _uploadProgress.asStateFlow()
+
+    private val _queueItemStates = MutableStateFlow<List<QueueItemProgress>>(emptyList())
+    val queueItemStates: StateFlow<List<QueueItemProgress>> = _queueItemStates.asStateFlow()
 
     private val _progressTitle = MutableStateFlow("")
     val progressTitle: StateFlow<String> = _progressTitle.asStateFlow()
@@ -263,8 +274,25 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
         currentProcessingJob = viewModelScope.launch {
             _isProcessing.value = true
             _progressFraction.value = 0f
+            _transformProgress.value = 0f
+            _uploadProgress.value = 0f
             _progressTitle.value = "Batch Processing $total Photos..."
             _progressSubtitle.value = "Starting ${style.name} transformation via ${config.activeProvider.displayName}"
+
+            val initialQueueStates = targetPhotos.map { photo ->
+                QueueItemProgress(
+                    photoId = photo.id,
+                    photoTitle = photo.title,
+                    uriString = photo.uriString,
+                    sampleGradientStart = photo.sampleGradientStart,
+                    sampleGradientEnd = photo.sampleGradientEnd,
+                    stage = QueueItemStage.QUEUED,
+                    transformProgress = 0f,
+                    uploadProgress = 0f,
+                    statusText = "Queued for ${style.name}"
+                )
+            }
+            _queueItemStates.value = initialQueueStates
 
             val task = BatchTask(
                 id = UUID.randomUUID().toString(),
@@ -276,6 +304,9 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
                 currentPhotoTitle = targetPhotos.first().title,
                 currentStepDescription = "Initializing neural latent space...",
                 progress = 0f,
+                transformProgress = 0f,
+                uploadProgress = 0f,
+                queueItemStates = initialQueueStates,
                 isRunning = true
             )
             _activeBatchTask.value = task
@@ -283,14 +314,22 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
             val newResults = mutableListOf<VariationResult>()
 
             targetPhotos.forEachIndexed { index, photo ->
-                val baseProgress = index.toFloat() / total.toFloat()
+                val baseItemFraction = index.toFloat() / total.toFloat()
                 _progressTitle.value = "Processing ${index + 1} of $total: ${photo.title}"
+
+                // Update current item to TRANSFORMING
+                _queueItemStates.value = _queueItemStates.value.mapIndexed { idx, item ->
+                    if (idx == index) {
+                        item.copy(stage = QueueItemStage.TRANSFORMING, statusText = "Synthesizing AI Style...")
+                    } else item
+                }
 
                 _activeBatchTask.value = _activeBatchTask.value?.copy(
                     completedItems = index,
                     currentPhotoTitle = photo.title,
                     currentStepDescription = "Generating ${style.name} variation...",
-                    progress = baseProgress
+                    progress = baseItemFraction,
+                    queueItemStates = _queueItemStates.value
                 )
 
                 val result = imageEngine.generateVariation(
@@ -299,36 +338,106 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
                     config = config
                 ) { stepDesc, stepFraction ->
                     _progressSubtitle.value = stepDesc
-                    val overallProgress = baseProgress + (stepFraction / total.toFloat())
-                    _progressFraction.value = overallProgress
+                    val overallTransform = (index.toFloat() + stepFraction) / total.toFloat()
+                    _transformProgress.value = overallTransform
+                    val combinedProgress = (overallTransform * 0.7f) + (_uploadProgress.value * 0.3f)
+                    _progressFraction.value = combinedProgress
+
+                    _queueItemStates.value = _queueItemStates.value.mapIndexed { idx, item ->
+                        if (idx == index) {
+                            item.copy(
+                                transformProgress = stepFraction,
+                                statusText = stepDesc
+                            )
+                        } else item
+                    }
+
                     _activeBatchTask.value = _activeBatchTask.value?.copy(
                         currentStepDescription = stepDesc,
-                        progress = overallProgress
+                        progress = combinedProgress,
+                        transformProgress = overallTransform,
+                        queueItemStates = _queueItemStates.value
                     )
+                }
+
+                // Item completed transformation
+                _queueItemStates.value = _queueItemStates.value.mapIndexed { idx, item ->
+                    if (idx == index) {
+                        item.copy(
+                            transformProgress = 1.0f,
+                            stage = if (storage.isCloudSyncEnabled && storage.autoSyncOnGenerate) QueueItemStage.UPLOADING else QueueItemStage.COMPLETED,
+                            statusText = if (storage.isCloudSyncEnabled && storage.autoSyncOnGenerate) "Uploading to Cloud..." else "Completed & Saved"
+                        )
+                    } else item
                 }
 
                 // Auto-sync to Cloud if configured
                 var finalResult = result
                 if (storage.isCloudSyncEnabled && storage.autoSyncOnGenerate) {
                     _progressSubtitle.value = "Syncing variation to ${storage.cloudProviderName}..."
-                    finalResult = cloudService.uploadToCloud(result, storage) { _, _ -> }
+                    finalResult = cloudService.uploadToCloud(result, storage) { uploadStep, uploadFraction ->
+                        _progressSubtitle.value = uploadStep
+                        val overallUpload = (index.toFloat() + uploadFraction) / total.toFloat()
+                        _uploadProgress.value = overallUpload
+                        val combinedProgress = (_transformProgress.value * 0.7f) + (overallUpload * 0.3f)
+                        _progressFraction.value = combinedProgress
+
+                        _queueItemStates.value = _queueItemStates.value.mapIndexed { idx, item ->
+                            if (idx == index) {
+                                item.copy(
+                                    uploadProgress = uploadFraction,
+                                    statusText = uploadStep
+                                )
+                            } else item
+                        }
+
+                        _activeBatchTask.value = _activeBatchTask.value?.copy(
+                            currentStepDescription = uploadStep,
+                            progress = combinedProgress,
+                            uploadProgress = overallUpload,
+                            queueItemStates = _queueItemStates.value
+                        )
+                    }
+                } else {
+                    _uploadProgress.value = (index + 1).toFloat() / total.toFloat()
+                }
+
+                // Finalize this item as COMPLETED
+                _queueItemStates.value = _queueItemStates.value.mapIndexed { idx, item ->
+                    if (idx == index) {
+                        item.copy(
+                            stage = QueueItemStage.COMPLETED,
+                            transformProgress = 1.0f,
+                            uploadProgress = 1.0f,
+                            statusText = "Completed"
+                        )
+                    } else item
                 }
 
                 newResults.add(0, finalResult)
                 _variations.value = newResults + _variations.value
+
+                if (index < targetPhotos.size - 1) {
+                    kotlinx.coroutines.delay(350)
+                }
             }
 
             _progressFraction.value = 1.0f
+            _transformProgress.value = 1.0f
+            _uploadProgress.value = 1.0f
             _progressTitle.value = "Batch Complete!"
             _progressSubtitle.value = "Generated $total variations in ${style.name} style."
             _activeBatchTask.value = _activeBatchTask.value?.copy(
                 completedItems = total,
                 progress = 1.0f,
+                transformProgress = 1.0f,
+                uploadProgress = 1.0f,
+                queueItemStates = _queueItemStates.value,
                 isRunning = false
             )
 
             showSnackbar("Successfully generated $total variations in ${style.name}!")
-            kotlinx.coroutines.delay(1800)
+            kotlinx.coroutines.delay(2200)
             _isProcessing.value = false
             _activeBatchTask.value = null
         }
