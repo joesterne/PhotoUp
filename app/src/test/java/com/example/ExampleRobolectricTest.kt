@@ -43,4 +43,41 @@ class ExampleRobolectricTest {
     assertEquals(0.5f, queueItem.transformProgress, 0.01f)
     assertEquals(0.2f, queueItem.uploadProgress, 0.01f)
   }
+
+  @Test
+  fun `style presets contain expected popular styling varieties`() {
+    val styles = SamplePhotoLibrary.popularStyles
+    assertTrue("Should contain at least 8 popular style presets", styles.size >= 8)
+
+    val styleIds = styles.map { it.id }
+    assertTrue(styleIds.contains("cyberpunk"))
+    assertTrue(styleIds.contains("anime_ghibli"))
+    assertTrue(styleIds.contains("renaissance"))
+    assertTrue(styleIds.contains("pixar_3d"))
+    assertTrue(styleIds.contains("vintage_polaroid"))
+    assertTrue(styleIds.contains("synthwave"))
+    assertTrue(styleIds.contains("pop_art"))
+    assertTrue(styleIds.contains("watercolor"))
+
+    styles.forEach { preset ->
+      assertTrue(preset.name.isNotBlank())
+      assertTrue(preset.promptModifiers.isNotBlank())
+      assertTrue(preset.description.isNotBlank())
+    }
+  }
+
+  @Test
+  fun `filter styles by search query matches correctly`() {
+    val styles = SamplePhotoLibrary.popularStyles
+    val ghibliMatches = styles.filter {
+      it.name.contains("Anime", ignoreCase = true) || it.description.contains("Ghibli", ignoreCase = true)
+    }
+    assertEquals(1, ghibliMatches.size)
+    assertEquals("anime_ghibli", ghibliMatches.first().id)
+
+    val retroMatches = styles.filter {
+      it.name.contains("Retro", ignoreCase = true) || it.tag.contains("Retro", ignoreCase = true)
+    }
+    assertTrue(retroMatches.any { it.id == "synthwave" })
+  }
 }

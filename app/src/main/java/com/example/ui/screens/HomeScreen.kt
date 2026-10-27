@@ -97,6 +97,8 @@ import com.example.ui.components.PhotoCard
 import com.example.ui.components.SettingsDrawerContent
 import com.example.ui.components.StorageSettingsSheet
 import com.example.ui.components.StyleCard
+import com.example.ui.components.StylePresetCarousel
+import com.example.ui.components.StyleSelectionDialog
 import com.example.ui.components.VariationCard
 import com.example.ui.dragdrop.DragGhostOverlay
 import com.example.ui.dragdrop.rememberDragDropState
@@ -144,6 +146,7 @@ fun HomeScreen(
     var showAIProviderSheet by remember { mutableStateOf(false) }
     var showStorageSheet by remember { mutableStateOf(false) }
     var showCameraCapture by remember { mutableStateOf(false) }
+    var showStyleSelectionDialog by remember { mutableStateOf(false) }
     var inspectVariation by remember { mutableStateOf<VariationResult?>(null) }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -186,6 +189,7 @@ fun HomeScreen(
                     storageConfig = storageConfig,
                     onOpenAIProviderSettings = { showAIProviderSheet = true },
                     onOpenStorageSettings = { showStorageSheet = true },
+                    onOpenStyleDialog = { showStyleSelectionDialog = true },
                     onLaunchCamera = { showCameraCapture = true },
                     onScanLibrary = {
                         photoPickerLauncher.launch(
@@ -364,6 +368,7 @@ fun HomeScreen(
                     viewModel.startBatchProcessing(selectedIds.toList(), selectedStyle)
                 },
                 onClearQueue = { viewModel.clearSelection() },
+                onOpenStyleSelection = { showStyleSelectionDialog = true },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
             )
 
@@ -460,6 +465,21 @@ fun HomeScreen(
                                 }
 
                                 OutlinedButton(
+                                    onClick = { showStyleSelectionDialog = true },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.testTag("open_style_dialog_action_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Palette,
+                                        contentDescription = "Presets",
+                                        tint = PrimaryVioletLight,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = "Presets", fontSize = 12.sp)
+                                }
+
+                                OutlinedButton(
                                     onClick = {
                                         if (selectedIds.size == photos.size) {
                                             viewModel.clearSelection()
@@ -477,6 +497,16 @@ fun HomeScreen(
                                 }
                             }
                         }
+
+                        // Interactive AI Styling Presets Carousel Component
+                        StylePresetCarousel(
+                            styles = styles,
+                            selectedStyle = selectedStyle,
+                            onSelectStyle = { viewModel.selectStyle(it) },
+                            onOpenStyleDialog = { showStyleSelectionDialog = true },
+                            queuedPhotosCount = queuedPhotos.size,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
 
                         // Category Filter Chips
                         val categories = listOf("All", "Auto-Picked", "Portrait", "Urban", "Landscape", "Nature", "Architecture", "Pet", "Night")
@@ -567,12 +597,37 @@ fun HomeScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Select or drag onto the batch zone above",
+                                    text = "Select, drag, or browse full presets catalog",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+
+                            Button(
+                                onClick = { showStyleSelectionDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("tab_styles_open_dialog_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Preset Catalog", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
+
+                        // Style Preset Carousel in Styles tab
+                        StylePresetCarousel(
+                            styles = styles,
+                            selectedStyle = selectedStyle,
+                            onSelectStyle = { viewModel.selectStyle(it) },
+                            onOpenStyleDialog = { showStyleSelectionDialog = true },
+                            queuedPhotosCount = queuedPhotos.size,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
 
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(1),
@@ -881,6 +936,25 @@ fun HomeScreen(
             onPhotoCaptured = { uri ->
                 showCameraCapture = false
                 viewModel.addCapturedPhoto(uri)
+            }
+        )
+    }
+
+    // AI Styling Presets Selection Dialog
+    if (showStyleSelectionDialog) {
+        StyleSelectionDialog(
+            styles = styles,
+            currentStyle = selectedStyle,
+            queuedPhotosCount = queuedPhotos.size,
+            onDismiss = { showStyleSelectionDialog = false },
+            onSelectStyle = { style ->
+                viewModel.selectStyle(style)
+            },
+            onApplyAndMorph = { style ->
+                viewModel.selectStyle(style)
+                if (selectedIds.isNotEmpty()) {
+                    viewModel.startBatchProcessing(selectedIds.toList(), style)
+                }
             }
         )
     }

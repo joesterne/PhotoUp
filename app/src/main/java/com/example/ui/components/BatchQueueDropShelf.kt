@@ -83,7 +83,8 @@ fun BatchQueueDropShelf(
     onReorderQueue: (fromIndex: Int, toIndex: Int) -> Unit,
     onStartPipeline: () -> Unit,
     onClearQueue: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenStyleSelection: (() -> Unit)? = null
 ) {
     val isDragging = dragDropState.isDragging
     val hoverTarget = dragDropState.activeHoverTargetId
@@ -149,12 +150,16 @@ fun BatchQueueDropShelf(
                                         Color(selectedStyle.secondaryColor)
                                     )
                                 )
-                            ),
+                            )
+                            .clickable(enabled = onOpenStyleSelection != null) {
+                                onOpenStyleSelection?.invoke()
+                            }
+                            .testTag("shelf_open_style_dialog_button"),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Queue,
-                            contentDescription = null,
+                            contentDescription = "Change Style Preset",
                             tint = Color.White,
                             modifier = Modifier.size(18.dp)
                         )
@@ -189,11 +194,14 @@ fun BatchQueueDropShelf(
                                 isQueueHovered -> "Release to add to pipeline queue!"
                                 isDirectProcessHovered -> "Release to trigger instant morph!"
                                 isDragging -> "Hover over target below to drop"
-                                queuedPhotos.isNotEmpty() -> "Ready to process with ${selectedStyle.name}"
+                                queuedPhotos.isNotEmpty() -> "Ready with ${selectedStyle.name} • Tap to change"
                                 else -> "Drag photos here using long-press to build your batch"
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (isQueueHovered || isDirectProcessHovered) SecondaryCyan else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isQueueHovered || isDirectProcessHovered) SecondaryCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = if (onOpenStyleSelection != null) {
+                                Modifier.clickable { onOpenStyleSelection.invoke() }
+                            } else Modifier
                         )
                     }
                 }

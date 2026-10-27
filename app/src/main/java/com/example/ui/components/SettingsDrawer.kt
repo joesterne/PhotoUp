@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -66,6 +67,7 @@ fun SettingsDrawerContent(
     storageConfig: StorageConfig,
     onOpenAIProviderSettings: () -> Unit,
     onOpenStorageSettings: () -> Unit,
+    onOpenStyleDialog: () -> Unit,
     onLaunchCamera: () -> Unit,
     onScanLibrary: () -> Unit,
     onAutoCurate: () -> Unit,
@@ -219,6 +221,38 @@ fun SettingsDrawerContent(
                 modifier = Modifier
                     .padding(horizontal = 12.dp, vertical = 2.dp)
                     .testTag("drawer_ai_provider_item")
+            )
+
+            NavigationDrawerItem(
+                label = {
+                    Column {
+                        Text(
+                            text = "AI Styling Presets",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "Explore 8 popular visual styles",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = null,
+                        tint = AccentAmber
+                    )
+                },
+                selected = false,
+                onClick = {
+                    onClose()
+                    onOpenStyleDialog()
+                },
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 2.dp)
+                    .testTag("drawer_style_presets_item")
             )
 
             // Section 2: Storage & Cloud Connectivity
