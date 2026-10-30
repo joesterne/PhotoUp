@@ -80,4 +80,50 @@ class ExampleRobolectricTest {
     }
     assertTrue(retroMatches.any { it.id == "synthwave" })
   }
+
+  @Test
+  fun `addCapturedPhoto stores photo with camera category and selects it`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.viewmodel.StyleMorphViewModel(app)
+    val testUri = android.net.Uri.parse("file:///data/user/0/com.example/cache/test_photo.jpg")
+    val initialPhotoCount = viewModel.photos.value.size
+
+    val photoId = viewModel.addCapturedPhoto(testUri)
+
+    assertTrue(photoId.startsWith("camera_capture_"))
+    assertEquals(initialPhotoCount + 1, viewModel.photos.value.size)
+    assertTrue(viewModel.selectedPhotoIds.value.contains(photoId))
+
+    val capturedPhoto = viewModel.photos.value.first()
+    assertEquals(photoId, capturedPhoto.id)
+    assertEquals("Camera", capturedPhoto.category)
+    assertEquals(testUri.toString(), capturedPhoto.uriString)
+    assertTrue(capturedPhoto.aestheticScore >= 0.85f)
+  }
+
+  @Test
+  fun `selectTab changes tab index correctly`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.viewmodel.StyleMorphViewModel(app)
+    assertEquals(0, viewModel.selectedTabIndex.value)
+
+    viewModel.selectTab(2)
+    assertEquals(2, viewModel.selectedTabIndex.value)
+
+    viewModel.selectTab(3)
+    assertEquals(3, viewModel.selectedTabIndex.value)
+  }
+
+  @Test
+  fun `addCapturedPhotoAndMorph switches tab and selects style`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.viewmodel.StyleMorphViewModel(app)
+    val cyberpunkStyle = SamplePhotoLibrary.popularStyles.first { it.id == "cyberpunk" }
+    val testUri = android.net.Uri.parse("file:///data/user/0/com.example/cache/snap.jpg")
+
+    viewModel.addCapturedPhotoAndMorph(testUri, cyberpunkStyle)
+
+    assertEquals(cyberpunkStyle.id, viewModel.selectedStyle.value.id)
+    assertEquals(2, viewModel.selectedTabIndex.value) // Switches to Variations tab
+  }
 }

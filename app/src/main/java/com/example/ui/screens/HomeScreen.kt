@@ -114,7 +114,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     viewModel: StyleMorphViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToCamera: (() -> Unit)? = null
 ) {
     val photos by viewModel.photos.collectAsState()
     val selectedIds by viewModel.selectedPhotoIds.collectAsState()
@@ -145,9 +146,17 @@ fun HomeScreen(
     // Sheet / Dialog states
     var showAIProviderSheet by remember { mutableStateOf(false) }
     var showStorageSheet by remember { mutableStateOf(false) }
-    var showCameraCapture by remember { mutableStateOf(false) }
+    var showCameraScreen by remember { mutableStateOf(false) }
     var showStyleSelectionDialog by remember { mutableStateOf(false) }
     var inspectVariation by remember { mutableStateOf<VariationResult?>(null) }
+
+    val launchCamera: () -> Unit = {
+        if (onNavigateToCamera != null) {
+            onNavigateToCamera()
+        } else {
+            showCameraScreen = true
+        }
+    }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
@@ -159,7 +168,7 @@ fun HomeScreen(
     val dragDropState = rememberDragDropState()
     val queuedPhotos = photos.filter { selectedIds.contains(it.id) }
 
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
     val tabTitles = listOf("Photo Library", "Styles", "Variations (${variations.size})", "Batch Queue")
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -190,7 +199,7 @@ fun HomeScreen(
                     onOpenAIProviderSettings = { showAIProviderSheet = true },
                     onOpenStorageSettings = { showStorageSheet = true },
                     onOpenStyleDialog = { showStyleSelectionDialog = true },
-                    onLaunchCamera = { showCameraCapture = true },
+                    onLaunchCamera = { launchCamera() },
                     onScanLibrary = {
                         photoPickerLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -387,7 +396,7 @@ fun HomeScreen(
                 tabTitles.forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTabIndex == index,
-                        onClick = { selectedTabIndex = index },
+                        onClick = { viewModel.selectTab(index) },
                         text = {
                             Text(
                                 text = title,
@@ -431,7 +440,7 @@ fun HomeScreen(
 
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Button(
-                                    onClick = { showCameraCapture = true },
+                                    onClick = { launchCamera() },
                                     colors = ButtonDefaults.buttonColors(containerColor = SecondaryCyan),
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.testTag("capture_camera_button")
@@ -929,14 +938,11 @@ fun HomeScreen(
         )
     }
 
-    // In-app CameraX Capture Dialog
-    if (showCameraCapture) {
-        CameraCaptureDialog(
-            onDismiss = { showCameraCapture = false },
-            onPhotoCaptured = { uri ->
-                showCameraCapture = false
-                viewModel.addCapturedPhoto(uri)
-            }
+    // Full in-app CameraScreen using CameraX
+    if (showCameraScreen) {
+        CameraScreen(
+            viewModel = viewModel,
+            onNavigateBack = { showCameraScreen = false }
         )
     }
 

@@ -53,6 +53,9 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
     val variations: StateFlow<List<VariationResult>> = _variations.asStateFlow()
 
     // Ongoing Task & Progress
+    private val _selectedTabIndex = MutableStateFlow(0)
+    val selectedTabIndex: StateFlow<Int> = _selectedTabIndex.asStateFlow()
+
     private val _activeBatchTask = MutableStateFlow<BatchTask?>(null)
     val activeBatchTask: StateFlow<BatchTask?> = _activeBatchTask.asStateFlow()
 
@@ -183,10 +186,15 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
         showSnackbar("Imported ${uris.size} photos from library into batch selection!")
     }
 
+    fun selectTab(index: Int) {
+        _selectedTabIndex.value = index.coerceIn(0, 3)
+    }
+
     /**
      * Adds photo captured directly via in-app CameraX capture.
+     * Returns the unique ID of the newly added photo item.
      */
-    fun addCapturedPhoto(uri: Uri) {
+    fun addCapturedPhoto(uri: Uri): String {
         val current = _photos.value.toMutableList()
         val id = "camera_capture_${System.currentTimeMillis()}"
         val title = "Captured Photo #${current.size + 1}"
@@ -211,6 +219,17 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
         _photos.value = current
         _selectedPhotoIds.value = _selectedPhotoIds.value + id
         showSnackbar("📸 Captured photo added to library & selected for AI processing!")
+        return id
+    }
+
+    /**
+     * Captures photo and immediately initiates AI transformation with the chosen style preset.
+     */
+    fun addCapturedPhotoAndMorph(uri: Uri, style: StylePreset) {
+        val id = addCapturedPhoto(uri)
+        selectStyle(style)
+        selectTab(2) // Jump to Variations / Ongoing tab
+        startBatchProcessing(listOf(id), style)
     }
 
     /**
