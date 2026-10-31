@@ -99,8 +99,10 @@ data class StorageConfig(
     val cloudFolderPath: String = "Google Drive/StyleMorph/Variations",
     val localFolderPath: String = "Internal Storage/Pictures/StyleMorph",
     val autoSyncOnGenerate: Boolean = true,
-    val localStorageUsedMb: Float = 42.8f,
-    val cloudStorageUsedMb: Float = 128.4f
+    // Real local usage is measured by the ViewModel; these used to be
+    // hardcoded constants (42.8 / 128.4 MB) displayed as if measured.
+    val localStorageUsedMb: Float = 0f,
+    val cloudStorageUsedMb: Float = 0f
 )
 
 /**
@@ -131,8 +133,8 @@ enum class QueueItemStage {
     QUEUED,
     TRANSFORMING,
     UPLOADING,
-    COMPLETED,
-    FAILED
+    COMPLETED
+    // FAILED removed: it was never assigned anywhere.
 }
 
 /**
@@ -167,6 +169,5 @@ data class BatchTask(
     val uploadProgress: Float = 0f, // 0.0f .. 1.0f for cloud storage upload stage
     val queueItemStates: List<QueueItemProgress> = emptyList(),
     val isRunning: Boolean,
-    val isCancelled: Boolean = false,
     val startTime: Long = System.currentTimeMillis()
 )

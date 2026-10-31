@@ -146,6 +146,7 @@ fun CameraScreen(
 
     // Camera Configuration States
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+    var boundLensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_AUTO) }
     var showGridLines by remember { mutableStateOf(true) }
     var isCapturing by remember { mutableStateOf(false) }
@@ -248,6 +249,12 @@ fun CameraScreen(
                     .fillMaxSize()
                     .testTag("camera_preview_view"),
                 update = { previewView ->
+                    // AndroidView's update runs on EVERY recomposition; the
+                    // unbind/rebind below used to tear down and rebind the
+                    // camera each time. Only rebind when the lens actually
+                    // changed (the factory does the initial bind).
+                    if (boundLensFacing == lensFacing) return@AndroidView
+                    boundLensFacing = lensFacing
                     try {
                         val cameraProviderFuture = ProcessCameraProvider.getInstance(previewView.context)
                         cameraProviderFuture.addListener({

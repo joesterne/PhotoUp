@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.AIProvider
@@ -131,9 +132,13 @@ fun AIProviderSheet(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Providers List
+            // Providers List. Only Gemini and the local engine have a real
+            // integration in this build - OpenAI / Stability are listed for
+            // transparency but are NOT selectable (selecting them used to
+            // label local shader renders as "dall-e-3" output).
             AIProvider.entries.forEach { provider ->
                 val isSelected = provider == selectedProvider
+                val isConnected = provider == AIProvider.GEMINI || provider == AIProvider.LOCAL_NEURAL
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -144,7 +149,7 @@ fun AIProviderSheet(
                             color = if (isSelected) PrimaryViolet else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                             shape = RoundedCornerShape(14.dp)
                         )
-                        .clickable {
+                        .clickable(enabled = isConnected) {
                             selectedProvider = provider
                             selectedModel = provider.defaultModel
                         }
@@ -179,6 +184,21 @@ fun AIProviderSheet(
                                         color = if (provider.isCloud) SecondaryCyan else AccentEmerald,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
+                                }
+                                if (!isConnected) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0x33F59E0B)
+                                    ) {
+                                        Text(
+                                            text = "Not connected",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFF59E0B),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
@@ -234,6 +254,25 @@ fun AIProviderSheet(
                         modifier = Modifier.testTag("model_chip_$modelName")
                     )
                 }
+            }
+
+            // Custom Gemini API key. The state and the onSave plumbing always
+            // existed, but no field was ever rendered - the key could never
+            // actually be entered.
+            if (selectedProvider == AIProvider.GEMINI) {
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = customApiKey,
+                    onValueChange = { customApiKey = it },
+                    label = { Text("Custom Gemini API Key (optional)") },
+                    placeholder = { Text("Leave blank to use the built-in key") },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Key, contentDescription = null) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("custom_api_key_field")
+                )
             }
 
             Spacer(modifier = Modifier.height(18.dp))

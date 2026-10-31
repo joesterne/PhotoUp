@@ -220,7 +220,7 @@ object SamplePhotoLibrary {
             promptUsed = "Neon Tokyo Alley reimagined in cyberpunk neon style with ultra-reflective wet pavement and glowing holographic signs",
             timestamp = System.currentTimeMillis() - 7200000,
             isSavedLocally = true,
-            isSyncedToCloud = true,
+            isSyncedToCloud = false, // sample data: nothing has actually been uploaded (no cloud backend in this build)
             primaryColor = 0xFF06B6D4,
             secondaryColor = 0xFFEC4899
         ),
@@ -235,7 +235,7 @@ object SamplePhotoLibrary {
             promptUsed = "Golden Hour Portrait styled as hand-painted Studio Ghibli character art with soft sunset clouds",
             timestamp = System.currentTimeMillis() - 5400000,
             isSavedLocally = true,
-            isSyncedToCloud = true,
+            isSyncedToCloud = false, // sample data: nothing has actually been uploaded (no cloud backend in this build)
             primaryColor = 0xFF10B981,
             secondaryColor = 0xFF38BDF8
         ),

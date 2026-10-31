@@ -5,7 +5,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -247,6 +249,7 @@ fun StylePresetCarousel(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StyleCarouselCard(
     style: StylePreset,
@@ -277,10 +280,17 @@ private fun StyleCarouselCard(
             .clip(RoundedCornerShape(16.dp))
             .border(
                 width = if (isSelected) 2.5.dp else 1.dp,
-                color = if (isSelected) AccentAmber else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                // borderColor (animated) was computed but never used - the
+                // border hardcoded the same two colors inline.
+                color = if (isSelected) borderColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
                 shape = RoundedCornerShape(16.dp)
             )
-            .clickable { onClick() }
+            // combinedClickable so the caller's onLongClick actually fires
+            // (plain clickable silently dropped it).
+            .combinedClickable(
+                onClick = { onClick() },
+                onLongClick = { onLongClick() }
+            )
             .testTag("style_carousel_card_${style.id}"),
         shape = RoundedCornerShape(16.dp),
         tonalElevation = if (isSelected) 8.dp else 2.dp,

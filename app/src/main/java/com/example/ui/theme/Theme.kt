@@ -51,7 +51,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = true, // Default to sleek dark aesthetic for creative photo app
+    darkTheme: Boolean = isSystemInDarkTheme(), // Follow the system (was hardcoded true - light scheme unreachable)
     dynamicColor: Boolean = false, // Keep intentional brand identity
     content: @Composable () -> Unit,
 ) {

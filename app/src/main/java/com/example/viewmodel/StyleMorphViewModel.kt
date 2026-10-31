@@ -14,7 +14,6 @@ import com.example.data.SamplePhotoLibrary
 import com.example.data.StorageConfig
 import com.example.data.StylePreset
 import com.example.data.VariationResult
-import com.example.service.CloudSyncService
 import com.example.service.ImageProcessingEngine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +28,8 @@ import java.util.UUID
 class StyleMorphViewModel(application: Application) : AndroidViewModel(application) {
 
     private val imageEngine = ImageProcessingEngine(application.applicationContext)
-    private val cloudService = CloudSyncService(application.applicationContext)
+    // No CloudSyncService wiring: cloud sync is not implemented in this
+    // build (see CloudSyncService) and the UI now says so instead of faking it.
 
     // Photos state
     private val _photos = MutableStateFlow<List<PhotoItem>>(SamplePhotoLibrary.initialPhotos)
@@ -104,6 +104,22 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
     init {
         // Initial auto-curation
         autoCuratePhotos()
+        refreshLocalStorageUsage()
+    }
+
+    /** Measures the real variations folder - the settings UI used to show
+     *  hardcoded 42.8 MB / 128.4 MB constants as if they were usage. */
+    private fun refreshLocalStorageUsage() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val dir = java.io.File(application.filesDir, "variations")
+            val bytes = if (dir.exists()) {
+                dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            } else {
+                0L
+            }
+            val mb = Math.round(bytes / 104857.6) / 10f
+            _storageConfig.value = _storageConfig.value.copy(localStorageUsedMb = mb)
+        }
     }
 
     fun setCategoryFilter(category: String) {
@@ -379,47 +395,25 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
                     )
                 }
 
-                // Item completed transformation
+                // Item completed transformation. (Cloud auto-sync used to run
+                // here, but no cloud backend exists in this build - the item
+                // completes as locally saved, honestly labeled.)
                 _queueItemStates.value = _queueItemStates.value.mapIndexed { idx, item ->
                     if (idx == index) {
                         item.copy(
                             transformProgress = 1.0f,
-                            stage = if (storage.isCloudSyncEnabled && storage.autoSyncOnGenerate) QueueItemStage.UPLOADING else QueueItemStage.COMPLETED,
-                            statusText = if (storage.isCloudSyncEnabled && storage.autoSyncOnGenerate) "Uploading to Cloud..." else "Completed & Saved"
+                            stage = QueueItemStage.COMPLETED,
+                            statusText = if (storage.isCloudSyncEnabled && storage.autoSyncOnGenerate) {
+                                "Completed & Saved locally (cloud sync unavailable)"
+                            } else {
+                                "Completed & Saved"
+                            }
                         )
                     } else item
                 }
 
-                // Auto-sync to Cloud if configured
-                var finalResult = result
-                if (storage.isCloudSyncEnabled && storage.autoSyncOnGenerate) {
-                    _progressSubtitle.value = "Syncing variation to ${storage.cloudProviderName}..."
-                    finalResult = cloudService.uploadToCloud(result, storage) { uploadStep, uploadFraction ->
-                        _progressSubtitle.value = uploadStep
-                        val overallUpload = (index.toFloat() + uploadFraction) / total.toFloat()
-                        _uploadProgress.value = overallUpload
-                        val combinedProgress = (_transformProgress.value * 0.7f) + (overallUpload * 0.3f)
-                        _progressFraction.value = combinedProgress
-
-                        _queueItemStates.value = _queueItemStates.value.mapIndexed { idx, item ->
-                            if (idx == index) {
-                                item.copy(
-                                    uploadProgress = uploadFraction,
-                                    statusText = uploadStep
-                                )
-                            } else item
-                        }
-
-                        _activeBatchTask.value = _activeBatchTask.value?.copy(
-                            currentStepDescription = uploadStep,
-                            progress = combinedProgress,
-                            uploadProgress = overallUpload,
-                            queueItemStates = _queueItemStates.value
-                        )
-                    }
-                } else {
-                    _uploadProgress.value = (index + 1).toFloat() / total.toFloat()
-                }
+                val finalResult = result
+                _uploadProgress.value = (index + 1).toFloat() / total.toFloat()
 
                 // Finalize this item as COMPLETED
                 _queueItemStates.value = _queueItemStates.value.mapIndexed { idx, item ->
@@ -445,6 +439,7 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
             _transformProgress.value = 1.0f
             _uploadProgress.value = 1.0f
             _progressTitle.value = "Batch Complete!"
+            refreshLocalStorageUsage()
             _progressSubtitle.value = "Generated $total variations in ${style.name} style."
             _activeBatchTask.value = _activeBatchTask.value?.copy(
                 completedItems = total,
@@ -506,50 +501,25 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun syncSingleVariationToCloud(variationId: String) {
-        val current = _variations.value
-        val item = current.find { it.id == variationId } ?: return
+        val item = _variations.value.find { it.id == variationId } ?: return
         if (item.isSyncedToCloud) {
-            showSnackbar("Already synced to ${_storageConfig.value.cloudProviderName}")
+            showSnackbar("Already marked as synced")
             return
         }
-
-        viewModelScope.launch {
-            _isProcessing.value = true
-            _progressFraction.value = 0.3f
-            _progressTitle.value = "Syncing to ${_storageConfig.value.cloudProviderName}"
-            _progressSubtitle.value = "Uploading ${item.styleName} variation..."
-
-            val synced = cloudService.uploadToCloud(item, _storageConfig.value) { step, frac ->
-                _progressSubtitle.value = step
-                _progressFraction.value = frac
-            }
-
-            _variations.value = current.map { if (it.id == variationId) synced else it }
-            _isProcessing.value = false
-            showSnackbar("Synced '${item.photoTitle}' to ${_storageConfig.value.cloudProviderName} ☁️")
-        }
+        // No cloud backend is integrated in this build. (This previously ran
+        // a fake upload and flagged the variation as synced; it also wrote
+        // results back over a stale pre-launch snapshot of _variations, which
+        // silently dropped variations generated during the "sync".)
+        showSnackbar("Cloud sync isn't available in this build yet - '${item.photoTitle}' is stored locally only")
     }
 
     fun syncAllUnsyncedToCloud() {
         val unsyncedCount = _variations.value.count { !it.isSyncedToCloud }
         if (unsyncedCount == 0) {
-            showSnackbar("All variations are already backed up to Cloud.")
+            showSnackbar("No unsynced variations.")
             return
         }
-
-        viewModelScope.launch {
-            _isProcessing.value = true
-            _progressTitle.value = "Syncing $unsyncedCount items to Cloud..."
-
-            val updated = cloudService.syncAllUnsynced(_variations.value, _storageConfig.value) { done, total, title, frac ->
-                _progressSubtitle.value = "Uploaded $done of $total: $title"
-                _progressFraction.value = frac
-            }
-
-            _variations.value = updated
-            _isProcessing.value = false
-            showSnackbar("Backed up $unsyncedCount variations to ${_storageConfig.value.cloudProviderName}!")
-        }
+        showSnackbar("Cloud sync isn't available in this build yet - nothing was uploaded")
     }
 
     fun exportVariationToGallery(variation: VariationResult) {

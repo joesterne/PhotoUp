@@ -150,7 +150,7 @@ fun StorageSettingsSheet(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "${config.localStorageUsedMb} MB",
+                            text = String.format("%.1f MB", config.localStorageUsedMb),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold
                         )
@@ -185,7 +185,7 @@ fun StorageSettingsSheet(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "${config.cloudStorageUsedMb} MB",
+                            text = "Not available",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
                             color = SecondaryCyan

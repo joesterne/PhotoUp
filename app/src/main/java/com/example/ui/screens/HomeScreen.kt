@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,13 +32,9 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
@@ -69,7 +64,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -83,16 +77,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.PhotoItem
 import com.example.data.VariationResult
 import com.example.ui.components.AIProviderSheet
 import com.example.ui.components.BatchProcessingStatusBar
 import com.example.ui.components.BatchQueueDropShelf
 import com.example.ui.components.BeforeAfterCompareDialog
-import com.example.ui.components.CameraCaptureDialog
 import com.example.ui.components.CircularProgressGauge
-import com.example.ui.components.DragDropBatchTarget
-import com.example.ui.components.GlobalProgressBar
 import com.example.ui.components.PhotoCard
 import com.example.ui.components.SettingsDrawerContent
 import com.example.ui.components.StorageSettingsSheet
@@ -166,7 +156,10 @@ fun HomeScreen(
     }
 
     val dragDropState = rememberDragDropState()
-    val queuedPhotos = photos.filter { selectedIds.contains(it.id) }
+    // Queue order must follow the selection order (reorderQueue operates on
+    // selectedIds order); filtering the photos list showed a different order
+    // than the one reordering actually changed.
+    val queuedPhotos = selectedIds.mapNotNull { id -> photos.find { it.id == id } }
 
     val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
     val tabTitles = listOf("Photo Library", "Styles", "Variations (${variations.size})", "Batch Queue")
@@ -556,7 +549,6 @@ fun HomeScreen(
                                     photo = photo,
                                     isSelected = selectedIds.contains(photo.id),
                                     onToggleSelect = { viewModel.togglePhotoSelection(photo.id) },
-                                    onInspect = { viewModel.togglePhotoSelection(photo.id) },
                                     onDragStart = { p, offset ->
                                         viewModel.setDraggedPhoto(p)
                                         dragDropState.startDragging(p, offset)

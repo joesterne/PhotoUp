@@ -33,10 +33,6 @@ class DragDropState {
         dropTargets[targetId] = boundsInWindow
     }
 
-    fun unregisterDropTarget(targetId: String) {
-        dropTargets.remove(targetId)
-    }
-
     fun startDragging(photo: PhotoItem, startPosition: Offset) {
         draggedPhoto = photo
         dragPosition = startPosition

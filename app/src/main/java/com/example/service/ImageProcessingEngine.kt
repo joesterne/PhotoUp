@@ -3,6 +3,7 @@ package com.example.service
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -14,6 +15,7 @@ import android.graphics.Shader
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Base64
 import android.util.Log
 import com.example.BuildConfig
 import com.example.data.AIProvider
@@ -67,23 +69,31 @@ class ImageProcessingEngine(private val context: Context) {
         delay(400)
 
         onProgress("Synthesizing style latent space (${config.selectedModel})...", 0.65f)
-        // If Gemini API is selected and user configured an API key in AI Studio Secrets panel, invoke REST
+        // If Gemini API is selected and a key is configured, invoke REST and
+        // use the image it actually returns.
         var resolvedModel = config.selectedModel
+        var remoteBitmap: Bitmap? = null
         val apiKey = if (config.customApiKey.isNotBlank()) config.customApiKey else BuildConfig.GEMINI_API_KEY
         if (config.activeProvider == AIProvider.GEMINI && apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
-            val remoteSuccess = callGeminiApi(apiKey, expandedPrompt, config.selectedModel)
-            if (!remoteSuccess) {
-                onProgress("Cloud AI busy (429) - Engaged On-Device Neural Engine", 0.75f)
+            remoteBitmap = callGeminiApi(apiKey, expandedPrompt, config.selectedModel)
+            if (remoteBitmap == null) {
+                onProgress("Cloud AI unavailable - Engaged On-Device Neural Engine", 0.75f)
                 resolvedModel = "${config.selectedModel} (On-Device Engine)"
             }
+        } else if (config.activeProvider != AIProvider.LOCAL_NEURAL) {
+            // OpenAI / Stability have no API integration in this build. Never
+            // label the local render with their model names (that produced
+            // variations claiming modelUsed = "dall-e-3").
+            onProgress("${config.activeProvider.displayName} is not connected - Engaged On-Device Neural Engine", 0.75f)
+            resolvedModel = "edge-artistic-shader-v2 (On-Device Engine)"
+            delay(500)
         } else {
-            // Realistic neural generation simulation delay
             delay(500)
         }
 
         onProgress("Rendering high-res texture & color matrix grading...", 0.85f)
-        // Generate high-fidelity visual bitmap
-        val styledBitmap = renderArtisticBitmap(photo, style, config.stylizationStrength)
+        // The Gemini image when one came back; otherwise the local render.
+        val styledBitmap = remoteBitmap ?: renderArtisticBitmap(photo, style, config.stylizationStrength)
         val savedFile = saveBitmapToLocalStorage(styledBitmap, "var_${photo.id}_${style.id}_${System.currentTimeMillis()}.png")
 
         onProgress("Finalizing variation & caching metadata...", 1.0f)
@@ -109,9 +119,12 @@ class ImageProcessingEngine(private val context: Context) {
 
     /**
      * Calls Gemini REST API generateContent.
-     * Returns true if successful, false if rate limited (429) or offline.
+     * Returns the image the API actually returned, or null when the call
+     * fails / is rate limited (429) / returns no image part. (Previously this
+     * returned a Boolean and threw the response body away, so a "successful"
+     * Gemini generation still showed the local shader render.)
      */
-    private fun callGeminiApi(apiKey: String, prompt: String, model: String): Boolean {
+    private fun callGeminiApi(apiKey: String, prompt: String, model: String): Bitmap? {
         return try {
             val jsonPayload = JSONObject().apply {
                 val contents = JSONArray().apply {
@@ -133,21 +146,44 @@ class ImageProcessingEngine(private val context: Context) {
 
             okHttpClient.newCall(request).execute().use { response ->
                 when (response.code) {
-                    200 -> true
+                    200 -> extractInlineImageBitmap(response.body?.string())
                     429 -> {
-                        // Rate limit / Quota reached: Log warning without triggering error alerts and fallback to local neural shaders
-                        Log.w("ImageProcessingEngine", "Gemini rate limited (HTTP 429). Seamlessly falling back to on-device Neural Engine.")
-                        false
+                        // Rate limit / Quota reached: fall back to local shaders
+                        Log.w("ImageProcessingEngine", "Gemini rate limited (HTTP 429). Falling back to on-device Neural Engine.")
+                        null
                     }
                     else -> {
                         Log.w("ImageProcessingEngine", "Gemini request returned ${response.code}: ${response.message}")
-                        false
+                        null
                     }
                 }
             }
         } catch (e: Exception) {
             Log.w("ImageProcessingEngine", "Gemini network call encountered exception: ${e.message}")
-            false
+            null
+        }
+    }
+
+    /** Pulls the first inlineData image out of a generateContent response. */
+    private fun extractInlineImageBitmap(responseBody: String?): Bitmap? {
+        if (responseBody.isNullOrBlank()) return null
+        return try {
+            val candidates = JSONObject(responseBody).optJSONArray("candidates") ?: return null
+            for (i in 0 until candidates.length()) {
+                val parts = candidates.optJSONObject(i)?.optJSONObject("content")?.optJSONArray("parts") ?: continue
+                for (j in 0 until parts.length()) {
+                    val inlineData = parts.optJSONObject(j)?.optJSONObject("inlineData") ?: continue
+                    val data = inlineData.optString("data")
+                    if (data.isNotBlank()) {
+                        val bytes = Base64.decode(data, Base64.DEFAULT)
+                        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.w("ImageProcessingEngine", "Could not parse Gemini image response: ${e.message}")
+            null
         }
     }
 
@@ -331,12 +367,24 @@ class ImageProcessingEngine(private val context: Context) {
                 ?: return@withContext false
 
             resolver.openOutputStream(uri)?.use { stream ->
-                // Render bitmap for this variation and write to stream
-                val photo = SamplePhotoLibrary.initialPhotos.find { it.id == variation.photoId }
-                    ?: SamplePhotoLibrary.initialPhotos.first()
-                val style = SamplePhotoLibrary.popularStyles.find { it.id == variation.styleId }
-                    ?: SamplePhotoLibrary.popularStyles.first()
-                val bitmap = renderArtisticBitmap(photo, style, 0.9f)
+                // Export the variation's actual saved image. (Previously this
+                // re-rendered a bitmap from the sample library by photo/style
+                // id, so exporting any real/generated photo saved a wrong,
+                // sample-based image instead.)
+                val savedPath = variation.localFilePath
+                val savedBitmap = if (!savedPath.isNullOrBlank()) {
+                    BitmapFactory.decodeFile(savedPath)
+                } else {
+                    null
+                }
+                val bitmap = savedBitmap ?: run {
+                    // Legacy fallback for variations with no saved file.
+                    val photo = SamplePhotoLibrary.initialPhotos.find { it.id == variation.photoId }
+                        ?: SamplePhotoLibrary.initialPhotos.first()
+                    val style = SamplePhotoLibrary.popularStyles.find { it.id == variation.styleId }
+                        ?: SamplePhotoLibrary.popularStyles.first()
+                    renderArtisticBitmap(photo, style, 0.9f)
+                }
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
             }
 

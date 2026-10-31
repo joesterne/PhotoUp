@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.example.ui.screens.CameraScreen
 import com.example.ui.screens.HomeScreen
@@ -29,7 +30,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                var currentScreen by remember { mutableStateOf(AppScreen.HOME) }
+                // rememberSaveable: plain remember reset navigation to HOME
+                // on every rotation / config change.
+                var currentScreen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
 
                 when (currentScreen) {
                     AppScreen.HOME -> {
