@@ -126,4 +126,44 @@ class ExampleRobolectricTest {
     assertEquals(cyberpunkStyle.id, viewModel.selectedStyle.value.id)
     assertEquals(2, viewModel.selectedTabIndex.value) // Switches to Variations tab
   }
+
+  @Test
+  fun `togglePhotoSelection and clearSelection update batch candidate ids`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.viewmodel.StyleMorphViewModel(app)
+
+    viewModel.clearSelection()
+    assertEquals(0, viewModel.selectedPhotoIds.value.size)
+
+    val testPhotoId = viewModel.photos.value.first().id
+    viewModel.togglePhotoSelection(testPhotoId)
+    assertTrue(viewModel.selectedPhotoIds.value.contains(testPhotoId))
+    assertEquals(1, viewModel.selectedPhotoIds.value.size)
+
+    // Toggle off
+    viewModel.togglePhotoSelection(testPhotoId)
+    assertEquals(0, viewModel.selectedPhotoIds.value.size)
+
+    // Select all
+    viewModel.selectAllPhotos()
+    assertEquals(viewModel.photos.value.size, viewModel.selectedPhotoIds.value.size)
+  }
+
+  @Test
+  fun `scanDeviceLocalStorage discovers image files in app internal directories`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val testPhotoDir = java.io.File(app.filesDir, "photos")
+    testPhotoDir.mkdirs()
+    val testImg = java.io.File(testPhotoDir, "landscape_autumn.jpg")
+    testImg.writeText("fake-image-bytes")
+
+    val viewModel = com.example.viewmodel.StyleMorphViewModel(app)
+    val discovered = viewModel.scanDeviceLocalStorage()
+
+    assertTrue("Discovered at least 1 local image", discovered >= 1)
+    val localItem = viewModel.photos.value.firstOrNull { it.id.contains("landscape_autumn") }
+    org.junit.Assert.assertNotNull("Local storage image should be added to photos", localItem)
+    assertEquals("Local Storage", localItem?.category)
+  }
 }
+

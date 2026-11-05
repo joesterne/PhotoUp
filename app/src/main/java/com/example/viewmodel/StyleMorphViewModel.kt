@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -246,6 +247,65 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
         selectStyle(style)
         selectTab(2) // Jump to Variations / Ongoing tab
         startBatchProcessing(listOf(id), style)
+    }
+
+    /**
+     * Scans local app & internal device picture storage directories for images.
+     * Incorporates newly discovered local storage photos into the library.
+     */
+    fun scanDeviceLocalStorage(): Int {
+        val app = getApplication<Application>()
+        val found = mutableListOf<PhotoItem>()
+        val currentUris = _photos.value.mapNotNull { it.uriString }.toSet()
+
+        val candidateDirs = listOfNotNull(
+            app.filesDir,
+            File(app.filesDir, "photos"),
+            File(app.filesDir, "captures"),
+            app.cacheDir,
+            File(app.cacheDir, "camera")
+        )
+
+        for (dir in candidateDirs) {
+            if (dir.exists() && dir.isDirectory) {
+                val files = dir.listFiles { file ->
+                    file.isFile && (file.extension.equals("jpg", true) ||
+                        file.extension.equals("jpeg", true) ||
+                        file.extension.equals("png", true) ||
+                        file.extension.equals("webp", true))
+                } ?: emptyArray()
+
+                for (file in files) {
+                    val uriStr = Uri.fromFile(file).toString()
+                    if (!currentUris.contains(uriStr)) {
+                        val isCamera = file.name.contains("camera", ignoreCase = true)
+                        val photoItem = PhotoItem(
+                            id = "local_storage_${file.nameWithoutExtension}_${file.lastModified()}",
+                            title = file.nameWithoutExtension.replace('_', ' ').replace('-', ' '),
+                            uriString = uriStr,
+                            category = if (isCamera) "Camera" else "Local Storage",
+                            aestheticScore = 0.92f,
+                            sharpnessScore = 0.94f,
+                            lightingScore = 0.91f,
+                            dynamicRangeScore = 0.90f,
+                            dateAdded = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(file.lastModified())),
+                            isAutoSelected = false,
+                            sampleGradientStart = 0xFF0284C7,
+                            sampleGradientEnd = 0xFF10B981
+                        )
+                        found.add(photoItem)
+                    }
+                }
+            }
+        }
+
+        if (found.isNotEmpty()) {
+            _photos.value = found + _photos.value
+            showSnackbar("Discovered ${found.size} photos in local device storage!")
+        } else {
+            showSnackbar("Local storage scanned. Library is up-to-date.")
+        }
+        return found.size
     }
 
     /**

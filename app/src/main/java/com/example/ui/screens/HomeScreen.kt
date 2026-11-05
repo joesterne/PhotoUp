@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,9 +33,13 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
@@ -64,6 +69,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -77,12 +83,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.PhotoItem
 import com.example.data.VariationResult
 import com.example.ui.components.AIProviderSheet
 import com.example.ui.components.BatchProcessingStatusBar
 import com.example.ui.components.BatchQueueDropShelf
 import com.example.ui.components.BeforeAfterCompareDialog
+import com.example.ui.components.CameraCaptureDialog
 import com.example.ui.components.CircularProgressGauge
+import com.example.ui.components.DragDropBatchTarget
+import com.example.ui.components.GlobalProgressBar
+import com.example.ui.components.LocalStoragePhotoGridView
 import com.example.ui.components.PhotoCard
 import com.example.ui.components.SettingsDrawerContent
 import com.example.ui.components.StorageSettingsSheet
@@ -156,10 +167,7 @@ fun HomeScreen(
     }
 
     val dragDropState = rememberDragDropState()
-    // Queue order must follow the selection order (reorderQueue operates on
-    // selectedIds order); filtering the photos list showed a different order
-    // than the one reordering actually changed.
-    val queuedPhotos = selectedIds.mapNotNull { id -> photos.find { it.id == id } }
+    val queuedPhotos = photos.filter { selectedIds.contains(it.id) }
 
     val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
     val tabTitles = listOf("Photo Library", "Styles", "Variations (${variations.size})", "Batch Queue")
@@ -405,101 +413,8 @@ fun HomeScreen(
             // Tab Content
             when (selectedTabIndex) {
                 0 -> {
-                    // TAB 1: Photo Library
+                    // TAB 1: Photo Library & Local Storage GridView
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Action Bar: Auto-Pick Best, Import Library, Select All, Clear
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = { viewModel.autoCuratePhotos() },
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.testTag("auto_pick_best_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = AccentAmber,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = "Auto-Pick Best", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Button(
-                                    onClick = { launchCamera() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SecondaryCyan),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.testTag("capture_camera_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PhotoCamera,
-                                        contentDescription = "Capture Photo",
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = "Capture", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
-                                        photoPickerLauncher.launch(
-                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                        )
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.testTag("scan_device_library_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.AddPhotoAlternate,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = "Scan", fontSize = 12.sp)
-                                }
-
-                                OutlinedButton(
-                                    onClick = { showStyleSelectionDialog = true },
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.testTag("open_style_dialog_action_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Palette,
-                                        contentDescription = "Presets",
-                                        tint = PrimaryVioletLight,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = "Presets", fontSize = 12.sp)
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
-                                        if (selectedIds.size == photos.size) {
-                                            viewModel.clearSelection()
-                                        } else {
-                                            viewModel.selectAllPhotos()
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.testTag("select_all_toggle_button")
-                                ) {
-                                    Text(
-                                        text = if (selectedIds.size == photos.size) "Clear" else "All (${photos.size})",
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-                        }
-
                         // Interactive AI Styling Presets Carousel Component
                         StylePresetCarousel(
                             styles = styles,
@@ -507,77 +422,57 @@ fun HomeScreen(
                             onSelectStyle = { viewModel.selectStyle(it) },
                             onOpenStyleDialog = { showStyleSelectionDialog = true },
                             queuedPhotosCount = queuedPhotos.size,
-                            modifier = Modifier.padding(bottom = 4.dp)
+                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                         )
 
-                        // Category Filter Chips
-                        val categories = listOf("All", "Auto-Picked", "Portrait", "Urban", "Landscape", "Nature", "Architecture", "Pet", "Night")
-                        LazyRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(categories) { cat ->
-                                FilterChip(
-                                    selected = categoryFilter == cat,
-                                    onClick = { viewModel.setCategoryFilter(cat) },
-                                    label = { Text(text = cat, fontSize = 12.sp) },
-                                    modifier = Modifier.testTag("filter_chip_$cat")
+                        // Dedicated Local Storage GridView with Selection Controls for Batch Processing
+                        LocalStoragePhotoGridView(
+                            photos = photos,
+                            selectedPhotoIds = selectedIds,
+                            activeStylePreset = selectedStyle,
+                            onToggleSelect = { photoId -> viewModel.togglePhotoSelection(photoId) },
+                            onSelectAll = { viewModel.selectAllPhotos() },
+                            onClearSelection = { viewModel.clearSelection() },
+                            onAutoCurate = { viewModel.autoCuratePhotos() },
+                            onStartBatchProcess = { ids, preset ->
+                                viewModel.startBatchProcessing(ids, preset)
+                            },
+                            onLaunchCamera = { launchCamera() },
+                            onImportFromDevice = {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                 )
-                            }
-                        }
-
-                        // Filtered Photos Grid
-                        val filteredPhotos = photos.filter { photo ->
-                            when (categoryFilter) {
-                                "All" -> true
-                                "Auto-Picked" -> photo.isAutoSelected
-                                else -> photo.category.equals(categoryFilter, ignoreCase = true)
-                            }
-                        }
-
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            items(filteredPhotos, key = { it.id }) { photo ->
-                                PhotoCard(
-                                    photo = photo,
-                                    isSelected = selectedIds.contains(photo.id),
-                                    onToggleSelect = { viewModel.togglePhotoSelection(photo.id) },
-                                    onDragStart = { p, offset ->
-                                        viewModel.setDraggedPhoto(p)
-                                        dragDropState.startDragging(p, offset)
-                                    },
-                                    onDrag = { dragAmount ->
-                                        dragDropState.onDrag(dragAmount)
-                                    },
-                                    onDragEnd = {
-                                        val dropTargetId = dragDropState.stopDragging()
-                                        val currentDragged = viewModel.draggedPhoto.value
-                                        viewModel.setDraggedPhoto(null)
-                                        if (currentDragged != null && dropTargetId != null) {
-                                            when (dropTargetId) {
-                                                "target_queue_drop" -> {
-                                                    viewModel.dropPhotoOntoBatchZone(currentDragged)
-                                                }
-                                                "target_direct_process" -> {
-                                                    viewModel.dropPhotoOntoBatchZone(currentDragged)
-                                                    viewModel.startBatchProcessing(
-                                                        (selectedIds + currentDragged.id).toList(),
-                                                        selectedStyle
-                                                    )
-                                                }
-                                            }
+                            },
+                            onScanLocalStorage = { viewModel.scanDeviceLocalStorage() },
+                            onOpenStyleDialog = { showStyleSelectionDialog = true },
+                            onDragStart = { p, offset ->
+                                viewModel.setDraggedPhoto(p)
+                                dragDropState.startDragging(p, offset)
+                            },
+                            onDrag = { dragAmount ->
+                                dragDropState.onDrag(dragAmount)
+                            },
+                            onDragEnd = {
+                                val dropTargetId = dragDropState.stopDragging()
+                                val currentDragged = viewModel.draggedPhoto.value
+                                viewModel.setDraggedPhoto(null)
+                                if (currentDragged != null && dropTargetId != null) {
+                                    when (dropTargetId) {
+                                        "target_queue_drop" -> {
+                                            viewModel.dropPhotoOntoBatchZone(currentDragged)
+                                        }
+                                        "target_direct_process" -> {
+                                            viewModel.dropPhotoOntoBatchZone(currentDragged)
+                                            viewModel.startBatchProcessing(
+                                                (selectedIds + currentDragged.id).toList(),
+                                                selectedStyle
+                                            )
                                         }
                                     }
-                                )
-                            }
-                        }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
 
