@@ -490,7 +490,6 @@ fun QueueItemProgressCard(
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                    else -> {}
                 }
             }
 
@@ -508,10 +507,10 @@ fun QueueItemProgressCard(
             Surface(
                 shape = RoundedCornerShape(4.dp),
                 color = when (item.stage) {
+                    QueueItemStage.QUEUED -> MaterialTheme.colorScheme.surfaceVariant
                     QueueItemStage.TRANSFORMING -> PrimaryViolet.copy(alpha = 0.2f)
                     QueueItemStage.UPLOADING -> SecondaryCyan.copy(alpha = 0.2f)
                     QueueItemStage.COMPLETED -> AccentEmerald.copy(alpha = 0.2f)
-                    else -> MaterialTheme.colorScheme.surfaceVariant
                 },
                 modifier = Modifier.padding(top = 2.dp)
             ) {
@@ -521,15 +520,14 @@ fun QueueItemProgressCard(
                         QueueItemStage.TRANSFORMING -> "Styling ${(animatedTransform * 100).toInt()}%"
                         QueueItemStage.UPLOADING -> "Syncing ${(animatedUpload * 100).toInt()}%"
                         QueueItemStage.COMPLETED -> "Ready"
-                        else -> "Failed"
                     },
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     color = when (item.stage) {
+                        QueueItemStage.QUEUED -> MaterialTheme.colorScheme.onSurfaceVariant
                         QueueItemStage.TRANSFORMING -> PrimaryVioletLight
                         QueueItemStage.UPLOADING -> SecondaryCyan
                         QueueItemStage.COMPLETED -> AccentEmerald
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                 )

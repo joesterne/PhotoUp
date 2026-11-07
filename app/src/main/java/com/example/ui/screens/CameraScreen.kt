@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -444,6 +445,7 @@ fun CameraScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .widthIn(max = 640.dp)
                         .padding(horizontal = 32.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -732,6 +734,7 @@ private fun PostCaptureReviewView(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .widthIn(max = 680.dp)
                 .align(Alignment.BottomCenter)
                 .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
             color = Color(0xF212121A),

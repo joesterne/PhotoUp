@@ -9,16 +9,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -44,6 +47,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -52,6 +57,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -89,10 +97,7 @@ import com.example.ui.components.AIProviderSheet
 import com.example.ui.components.BatchProcessingStatusBar
 import com.example.ui.components.BatchQueueDropShelf
 import com.example.ui.components.BeforeAfterCompareDialog
-import com.example.ui.components.CameraCaptureDialog
 import com.example.ui.components.CircularProgressGauge
-import com.example.ui.components.DragDropBatchTarget
-import com.example.ui.components.GlobalProgressBar
 import com.example.ui.components.LocalStoragePhotoGridView
 import com.example.ui.components.PhotoCard
 import com.example.ui.components.SettingsDrawerContent
@@ -100,6 +105,9 @@ import com.example.ui.components.StorageSettingsSheet
 import com.example.ui.components.StyleCard
 import com.example.ui.components.StylePresetCarousel
 import com.example.ui.components.StyleSelectionDialog
+import com.example.ui.components.TabletBatchStudioPane
+import com.example.ui.components.TabletStyleDetailPane
+import com.example.ui.components.TabletVariationDetailPane
 import com.example.ui.components.VariationCard
 import com.example.ui.dragdrop.DragGhostOverlay
 import com.example.ui.dragdrop.rememberDragDropState
@@ -190,7 +198,9 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val isTablet = maxWidth >= 720.dp
+
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -351,430 +361,1048 @@ fun HomeScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Batch processing status bar with animated circular indicators for transform & upload
-            BatchProcessingStatusBar(
-                isVisible = isProcessing,
-                title = progressTitle,
-                subtitle = progressSubtitle,
-                transformProgress = transformProgress,
-                uploadProgress = uploadProgress,
-                queueItems = queueItemStates,
-                onCancel = { viewModel.cancelBatchProcessing() }
-            )
-
-            // Interactive Visual Drag-and-Drop Batch Shelf
-            BatchQueueDropShelf(
-                queuedPhotos = queuedPhotos,
-                selectedStyle = selectedStyle,
-                dragDropState = dragDropState,
-                onRemoveFromQueue = { photoId -> viewModel.removeFromQueue(photoId) },
-                onReorderQueue = { from, to -> viewModel.reorderQueue(from, to) },
-                onStartPipeline = {
-                    viewModel.startBatchProcessing(selectedIds.toList(), selectedStyle)
-                },
-                onClearQueue = { viewModel.clearSelection() },
-                onOpenStyleSelection = { showStyleSelectionDialog = true },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-            )
-
-            // Navigation Tabs
-            TabRow(
-                selectedTabIndex = selectedTabIndex,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                        color = PrimaryViolet
-                    )
-                }
-            ) {
-                tabTitles.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTabIndex == index,
-                        onClick = { viewModel.selectTab(index) },
-                        text = {
-                            Text(
-                                text = title,
-                                fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTabIndex == index) PrimaryVioletLight else MaterialTheme.colorScheme.onSurfaceVariant
+            // Tablet-first: side NavigationRail on wide screens
+            if (isTablet) {
+                NavigationRail(
+                    modifier = Modifier
+                        .width(84.dp)
+                        .fillMaxHeight(),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    header = {
+                        IconButton(
+                            onClick = { launchCamera() },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(PrimaryViolet.copy(alpha = 0.15f))
+                                .testTag("tablet_rail_camera_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoCamera,
+                                contentDescription = "Capture Photo",
+                                tint = PrimaryVioletLight,
+                                modifier = Modifier.size(24.dp)
                             )
-                        },
-                        modifier = Modifier.testTag("tab_$index")
-                    )
+                        }
+                    }
+                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    tabTitles.forEachIndexed { index, title ->
+                        val icon = when (index) {
+                            0 -> Icons.Default.Collections
+                            1 -> Icons.Default.Palette
+                            2 -> Icons.Default.Layers
+                            else -> Icons.Default.Checklist
+                        }
+                        val badgeCount = when (index) {
+                            0 -> selectedIds.size
+                            2 -> variations.size
+                            3 -> if (isProcessing) 1 else 0
+                            else -> 0
+                        }
+
+                        NavigationRailItem(
+                            selected = selectedTabIndex == index,
+                            onClick = { viewModel.selectTab(index) },
+                            icon = {
+                                if (badgeCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(
+                                                containerColor = if (index == 3) SecondaryCyan else PrimaryViolet,
+                                                contentColor = Color.White
+                                            ) {
+                                                Text(badgeCount.toString())
+                                            }
+                                        }
+                                    ) {
+                                        Icon(imageVector = icon, contentDescription = title)
+                                    }
+                                } else {
+                                    Icon(imageVector = icon, contentDescription = title)
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = when (index) {
+                                        0 -> "Photos"
+                                        1 -> "Styles"
+                                        2 -> "Variations"
+                                        else -> "Queue"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            colors = NavigationRailItemDefaults.colors(
+                                selectedIconColor = Color.White,
+                                selectedTextColor = PrimaryVioletLight,
+                                indicatorColor = PrimaryViolet
+                            ),
+                            modifier = Modifier.testTag("tab_$index")
+                        )
+                    }
                 }
             }
 
-            // Tab Content
-            when (selectedTabIndex) {
-                0 -> {
-                    // TAB 1: Photo Library & Local Storage GridView
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Interactive AI Styling Presets Carousel Component
-                        StylePresetCarousel(
-                            styles = styles,
-                            selectedStyle = selectedStyle,
-                            onSelectStyle = { viewModel.selectStyle(it) },
-                            onOpenStyleDialog = { showStyleSelectionDialog = true },
-                            queuedPhotosCount = queuedPhotos.size,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                        )
+            // Main Content Area
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            ) {
+                // Batch processing status bar with animated circular indicators for transform & upload
+                BatchProcessingStatusBar(
+                    isVisible = isProcessing,
+                    title = progressTitle,
+                    subtitle = progressSubtitle,
+                    transformProgress = transformProgress,
+                    uploadProgress = uploadProgress,
+                    queueItems = queueItemStates,
+                    onCancel = { viewModel.cancelBatchProcessing() }
+                )
 
-                        // Dedicated Local Storage GridView with Selection Controls for Batch Processing
-                        LocalStoragePhotoGridView(
-                            photos = photos,
-                            selectedPhotoIds = selectedIds,
-                            activeStylePreset = selectedStyle,
-                            onToggleSelect = { photoId -> viewModel.togglePhotoSelection(photoId) },
-                            onSelectAll = { viewModel.selectAllPhotos() },
-                            onClearSelection = { viewModel.clearSelection() },
-                            onAutoCurate = { viewModel.autoCuratePhotos() },
-                            onStartBatchProcess = { ids, preset ->
-                                viewModel.startBatchProcessing(ids, preset)
-                            },
-                            onLaunchCamera = { launchCamera() },
-                            onImportFromDevice = {
-                                photoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                // Mobile-only top drop shelf and top TabRow (on tablet, replaced by NavigationRail + TabletBatchStudioPane)
+                if (!isTablet) {
+                    BatchQueueDropShelf(
+                        queuedPhotos = queuedPhotos,
+                        selectedStyle = selectedStyle,
+                        dragDropState = dragDropState,
+                        onRemoveFromQueue = { photoId -> viewModel.removeFromQueue(photoId) },
+                        onReorderQueue = { from, to -> viewModel.reorderQueue(from, to) },
+                        onStartPipeline = {
+                            viewModel.startBatchProcessing(selectedIds.toList(), selectedStyle)
+                        },
+                        onClearQueue = { viewModel.clearSelection() },
+                        onOpenStyleSelection = { showStyleSelectionDialog = true },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
+
+                    // Navigation Tabs on Mobile
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        indicator = { tabPositions ->
+                            TabRowDefaults.SecondaryIndicator(
+                                Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                                color = PrimaryViolet
+                            )
+                        }
+                    ) {
+                        tabTitles.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTabIndex == index,
+                                onClick = { viewModel.selectTab(index) },
+                                text = {
+                                    Text(
+                                        text = title,
+                                        fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (selectedTabIndex == index) PrimaryVioletLight else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                modifier = Modifier.testTag("tab_$index")
+                            )
+                        }
+                    }
+                }
+
+                // Tab Content Router
+                when (selectedTabIndex) {
+                    0 -> {
+                        // TAB 1: Photo Library & Local Storage GridView
+                        if (isTablet) {
+                            // Two-Pane Canonical Layout for Tablet
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1.3f)
+                                        .fillMaxHeight()
+                                ) {
+                                    StylePresetCarousel(
+                                        styles = styles,
+                                        selectedStyle = selectedStyle,
+                                        onSelectStyle = { viewModel.selectStyle(it) },
+                                        onOpenStyleDialog = { showStyleSelectionDialog = true },
+                                        queuedPhotosCount = queuedPhotos.size,
+                                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                                    )
+
+                                    LocalStoragePhotoGridView(
+                                        photos = photos,
+                                        selectedPhotoIds = selectedIds,
+                                        activeStylePreset = selectedStyle,
+                                        onToggleSelect = { photoId -> viewModel.togglePhotoSelection(photoId) },
+                                        onSelectAll = { viewModel.selectAllPhotos() },
+                                        onClearSelection = { viewModel.clearSelection() },
+                                        onAutoCurate = { viewModel.autoCuratePhotos() },
+                                        onStartBatchProcess = { ids, preset ->
+                                            viewModel.startBatchProcessing(ids, preset)
+                                        },
+                                        onLaunchCamera = { launchCamera() },
+                                        onImportFromDevice = {
+                                            photoPickerLauncher.launch(
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                            )
+                                        },
+                                        onScanLocalStorage = { viewModel.scanDeviceLocalStorage() },
+                                        onOpenStyleDialog = { showStyleSelectionDialog = true },
+                                        onDragStart = { p, offset ->
+                                            viewModel.setDraggedPhoto(p)
+                                            dragDropState.startDragging(p, offset)
+                                        },
+                                        onDrag = { dragAmount ->
+                                            dragDropState.onDrag(dragAmount)
+                                        },
+                                        onDragEnd = {
+                                            val dropTargetId = dragDropState.stopDragging()
+                                            val currentDragged = viewModel.draggedPhoto.value
+                                            viewModel.setDraggedPhoto(null)
+                                            if (currentDragged != null && dropTargetId != null) {
+                                                when (dropTargetId) {
+                                                    "target_queue_drop", "target_studio_pane" -> {
+                                                        viewModel.dropPhotoOntoBatchZone(currentDragged)
+                                                    }
+                                                    "target_direct_process" -> {
+                                                        viewModel.dropPhotoOntoBatchZone(currentDragged)
+                                                        viewModel.startBatchProcessing(
+                                                            (selectedIds + currentDragged.id).toList(),
+                                                            selectedStyle
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+
+                                TabletBatchStudioPane(
+                                    queuedPhotos = queuedPhotos,
+                                    selectedIds = selectedIds,
+                                    selectedStyle = selectedStyle,
+                                    styles = styles,
+                                    aiConfig = aiConfig,
+                                    storageConfig = storageConfig,
+                                    dragDropState = dragDropState,
+                                    onSelectStyle = { viewModel.selectStyle(it) },
+                                    onOpenStyleDialog = { showStyleSelectionDialog = true },
+                                    onRemoveFromQueue = { photoId -> viewModel.removeFromQueue(photoId) },
+                                    onReorderQueue = { from, to -> viewModel.reorderQueue(from, to) },
+                                    onClearQueue = { viewModel.clearSelection() },
+                                    onStartPipeline = {
+                                        viewModel.startBatchProcessing(selectedIds.toList(), selectedStyle)
+                                    },
+                                    onOpenAIProviderSettings = { showAIProviderSheet = true },
+                                    onOpenStorageSettings = { showStorageSheet = true },
+                                    modifier = Modifier
+                                        .weight(0.7f)
+                                        .fillMaxHeight()
                                 )
-                            },
-                            onScanLocalStorage = { viewModel.scanDeviceLocalStorage() },
-                            onOpenStyleDialog = { showStyleSelectionDialog = true },
-                            onDragStart = { p, offset ->
-                                viewModel.setDraggedPhoto(p)
-                                dragDropState.startDragging(p, offset)
-                            },
-                            onDrag = { dragAmount ->
-                                dragDropState.onDrag(dragAmount)
-                            },
-                            onDragEnd = {
-                                val dropTargetId = dragDropState.stopDragging()
-                                val currentDragged = viewModel.draggedPhoto.value
-                                viewModel.setDraggedPhoto(null)
-                                if (currentDragged != null && dropTargetId != null) {
-                                    when (dropTargetId) {
-                                        "target_queue_drop" -> {
-                                            viewModel.dropPhotoOntoBatchZone(currentDragged)
+                            }
+                        } else {
+                            // Mobile Single-Pane Layout
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                StylePresetCarousel(
+                                    styles = styles,
+                                    selectedStyle = selectedStyle,
+                                    onSelectStyle = { viewModel.selectStyle(it) },
+                                    onOpenStyleDialog = { showStyleSelectionDialog = true },
+                                    queuedPhotosCount = queuedPhotos.size,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                                )
+
+                                LocalStoragePhotoGridView(
+                                    photos = photos,
+                                    selectedPhotoIds = selectedIds,
+                                    activeStylePreset = selectedStyle,
+                                    onToggleSelect = { photoId -> viewModel.togglePhotoSelection(photoId) },
+                                    onSelectAll = { viewModel.selectAllPhotos() },
+                                    onClearSelection = { viewModel.clearSelection() },
+                                    onAutoCurate = { viewModel.autoCuratePhotos() },
+                                    onStartBatchProcess = { ids, preset ->
+                                        viewModel.startBatchProcessing(ids, preset)
+                                    },
+                                    onLaunchCamera = { launchCamera() },
+                                    onImportFromDevice = {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    onScanLocalStorage = { viewModel.scanDeviceLocalStorage() },
+                                    onOpenStyleDialog = { showStyleSelectionDialog = true },
+                                    onDragStart = { p, offset ->
+                                        viewModel.setDraggedPhoto(p)
+                                        dragDropState.startDragging(p, offset)
+                                    },
+                                    onDrag = { dragAmount ->
+                                        dragDropState.onDrag(dragAmount)
+                                    },
+                                    onDragEnd = {
+                                        val dropTargetId = dragDropState.stopDragging()
+                                        val currentDragged = viewModel.draggedPhoto.value
+                                        viewModel.setDraggedPhoto(null)
+                                        if (currentDragged != null && dropTargetId != null) {
+                                            when (dropTargetId) {
+                                                "target_queue_drop" -> {
+                                                    viewModel.dropPhotoOntoBatchZone(currentDragged)
+                                                }
+                                                "target_direct_process" -> {
+                                                    viewModel.dropPhotoOntoBatchZone(currentDragged)
+                                                    viewModel.startBatchProcessing(
+                                                        (selectedIds + currentDragged.id).toList(),
+                                                        selectedStyle
+                                                    )
+                                                }
+                                            }
                                         }
-                                        "target_direct_process" -> {
-                                            viewModel.dropPhotoOntoBatchZone(currentDragged)
-                                            viewModel.startBatchProcessing(
-                                                (selectedIds + currentDragged.id).toList(),
-                                                selectedStyle
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    1 -> {
+                        // TAB 2: Popular AI Styles
+                        if (isTablet) {
+                            // Two-Pane Canonical Layout for Styles
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1.1f)
+                                        .fillMaxHeight()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "Popular AI Styles",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "Tap to select and inspect deep prompt details",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
+                                        Button(
+                                            onClick = { showStyleSelectionDialog = true },
+                                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.testTag("tab_styles_open_dialog_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Tune,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Preset Catalog", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(1),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        items(styles, key = { it.id }) { style ->
+                                            StyleCard(
+                                                style = style,
+                                                isSelected = selectedStyle.id == style.id,
+                                                onSelect = { viewModel.selectStyle(style) },
+                                                onApplyToBatch = {
+                                                    viewModel.selectStyle(style)
+                                                    if (selectedIds.isNotEmpty()) {
+                                                        viewModel.startBatchProcessing(selectedIds.toList(), style)
+                                                    } else {
+                                                        viewModel.showSnackbar("Style selected! Choose photos in Photo Library to batch transform.")
+                                                    }
+                                                },
+                                                onDragStart = { s -> viewModel.setDraggedStyle(s) },
+                                                onDragEnd = { viewModel.setDraggedStyle(null) }
                                             )
                                         }
                                     }
                                 }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
 
-                1 -> {
-                    // TAB 2: Popular AI Styles
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Popular AI Styles",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Select, drag, or browse full presets catalog",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Button(
-                                onClick = { showStyleSelectionDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("tab_styles_open_dialog_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Preset Catalog", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        // Style Preset Carousel in Styles tab
-                        StylePresetCarousel(
-                            styles = styles,
-                            selectedStyle = selectedStyle,
-                            onSelectStyle = { viewModel.selectStyle(it) },
-                            onOpenStyleDialog = { showStyleSelectionDialog = true },
-                            queuedPhotosCount = queuedPhotos.size,
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
-
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(1),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            items(styles, key = { it.id }) { style ->
-                                StyleCard(
-                                    style = style,
-                                    isSelected = selectedStyle.id == style.id,
-                                    onSelect = { viewModel.selectStyle(style) },
-                                    onApplyToBatch = {
-                                        viewModel.selectStyle(style)
+                                TabletStyleDetailPane(
+                                    style = selectedStyle,
+                                    queuedPhotosCount = queuedPhotos.size,
+                                    onApplyToBatch = { styleToApply ->
+                                        viewModel.selectStyle(styleToApply)
                                         if (selectedIds.isNotEmpty()) {
-                                            viewModel.startBatchProcessing(selectedIds.toList(), style)
+                                            viewModel.startBatchProcessing(selectedIds.toList(), styleToApply)
                                         } else {
-                                            viewModel.showSnackbar("Style selected! Choose photos in Photo Library to batch transform.")
+                                            viewModel.showSnackbar("Choose photos in Photo Library to batch transform with ${styleToApply.name}!")
                                         }
                                     },
-                                    onDragStart = { s -> viewModel.setDraggedStyle(s) },
-                                    onDragEnd = { viewModel.setDraggedStyle(null) }
+                                    onOpenCatalog = { showStyleSelectionDialog = true },
+                                    modifier = Modifier
+                                        .weight(0.9f)
+                                        .fillMaxHeight()
                                 )
-                            }
-                        }
-                    }
-                }
-
-                2 -> {
-                    // TAB 3: Variations Gallery
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Variations header with Cloud Sync All
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "${variations.size} Generated Variations",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Tap any card to compare before / after",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            val unsyncedCount = variations.count { !it.isSyncedToCloud }
-                            if (unsyncedCount > 0) {
-                                OutlinedButton(
-                                    onClick = { viewModel.syncAllUnsyncedToCloud() },
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.testTag("sync_all_variations_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CloudQueue,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = SecondaryCyan
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = "Sync ($unsyncedCount)", fontSize = 12.sp)
-                                }
-                            }
-                        }
-
-                        if (variations.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(32.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        imageVector = Icons.Default.Palette,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.outline,
-                                        modifier = Modifier.size(64.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        text = "No Variations Generated Yet",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "Select photos and pick a style to create variations!",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
                             }
                         } else {
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(2),
-                                contentPadding = PaddingValues(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(variations, key = { it.id }) { variation ->
-                                    VariationCard(
-                                        variation = variation,
-                                        onClick = { inspectVariation = variation },
-                                        onSyncCloud = { viewModel.syncSingleVariationToCloud(variation.id) },
-                                        onSaveToDevice = { viewModel.exportVariationToGallery(variation) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                3 -> {
-                    // TAB 4: Batch Queue & Task Inspector
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Batch Queue & Tasks",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Monitor and control ongoing batch operations",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Active Task Card if running
-                        if (activeTask != null) {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp)),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                tonalElevation = 4.dp
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                            // Mobile Single-Pane Styles
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
                                         Text(
-                                            text = activeTask?.title ?: "Active Task",
+                                            text = "Popular AI Styles",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
-
-                                        Button(
-                                            onClick = { viewModel.cancelBatchProcessing() },
-                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text("Cancel", fontSize = 12.sp)
-                                        }
+                                        Text(
+                                            text = "Select, drag, or browse full presets catalog",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
 
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = "Current: ${activeTask?.currentPhotoTitle}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = SecondaryCyan
-                                    )
-                                    Text(
-                                        text = activeTask?.currentStepDescription ?: "",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Button(
+                                        onClick = { showStyleSelectionDialog = true },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.testTag("tab_styles_open_dialog_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tune,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Preset Catalog", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
 
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                StylePresetCarousel(
+                                    styles = styles,
+                                    selectedStyle = selectedStyle,
+                                    onSelectStyle = { viewModel.selectStyle(it) },
+                                    onOpenStyleDialog = { showStyleSelectionDialog = true },
+                                    queuedPhotosCount = queuedPhotos.size,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
 
-                                    // Dual Circular Progress Gauges in Tab 4
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(1),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    items(styles, key = { it.id }) { style ->
+                                        StyleCard(
+                                            style = style,
+                                            isSelected = selectedStyle.id == style.id,
+                                            onSelect = { viewModel.selectStyle(style) },
+                                            onApplyToBatch = {
+                                                viewModel.selectStyle(style)
+                                                if (selectedIds.isNotEmpty()) {
+                                                    viewModel.startBatchProcessing(selectedIds.toList(), style)
+                                                } else {
+                                                    viewModel.showSnackbar("Style selected! Choose photos in Photo Library to batch transform.")
+                                                }
+                                            },
+                                            onDragStart = { s -> viewModel.setDraggedStyle(s) },
+                                            onDragEnd = { viewModel.setDraggedStyle(null) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    2 -> {
+                        // TAB 3: Variations Gallery
+                        if (isTablet) {
+                            // Two-Pane Canonical Layout for Variations
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(if (inspectVariation != null) 1.1f else 2f)
+                                        .fillMaxHeight()
+                                ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surface)
-                                            .padding(12.dp),
-                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        CircularProgressGauge(
-                                            label = "AI Transform",
-                                            progress = transformProgress,
-                                            color = PrimaryVioletLight,
-                                            trackColor = PrimaryViolet.copy(alpha = 0.2f),
-                                            icon = Icons.Default.AutoAwesome,
-                                            testTag = "tab_transform_gauge"
-                                        )
+                                        Column {
+                                            Text(
+                                                text = "${variations.size} Generated Variations",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "Tap any card to inspect side-by-side",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
 
-                                        CircularProgressGauge(
-                                            label = "Cloud Sync",
-                                            progress = uploadProgress,
-                                            color = SecondaryCyan,
-                                            trackColor = SecondaryCyan.copy(alpha = 0.2f),
-                                            icon = Icons.Default.CloudUpload,
-                                            testTag = "tab_upload_gauge"
-                                        )
+                                        val unsyncedCount = variations.count { !it.isSyncedToCloud }
+                                        if (unsyncedCount > 0) {
+                                            OutlinedButton(
+                                                onClick = { viewModel.syncAllUnsyncedToCloud() },
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.testTag("sync_all_variations_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CloudQueue,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = SecondaryCyan
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(text = "Sync ($unsyncedCount)", fontSize = 12.sp)
+                                            }
+                                        }
                                     }
 
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        text = "Completed ${activeTask?.completedItems} of ${activeTask?.totalItems}",
-                                        style = MaterialTheme.typography.labelSmall
+                                    if (variations.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(32.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Palette,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.outline,
+                                                    modifier = Modifier.size(64.dp)
+                                                )
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                Text(
+                                                    text = "No Variations Generated Yet",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    text = "Select photos and pick a style to create variations!",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        LazyVerticalGrid(
+                                            columns = GridCells.Adaptive(minSize = 160.dp),
+                                            contentPadding = PaddingValues(16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            items(variations, key = { it.id }) { variation ->
+                                                VariationCard(
+                                                    variation = variation,
+                                                    onClick = { inspectVariation = variation },
+                                                    onSyncCloud = { viewModel.syncSingleVariationToCloud(variation.id) },
+                                                    onSaveToDevice = { viewModel.exportVariationToGallery(variation) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Right Detail Pane when a variation is tapped on Tablet
+                                inspectVariation?.let { variation ->
+                                    val origPhoto = photos.find { it.id == variation.photoId }
+                                    TabletVariationDetailPane(
+                                        variation = variation,
+                                        originalPhoto = origPhoto,
+                                        onClose = { inspectVariation = null },
+                                        onSyncCloud = { viewModel.syncSingleVariationToCloud(variation.id) },
+                                        onSaveToDevice = { viewModel.exportVariationToGallery(variation) },
+                                        onDelete = {
+                                            viewModel.deleteVariation(variation.id)
+                                            inspectVariation = null
+                                        },
+                                        modifier = Modifier
+                                            .weight(0.9f)
+                                            .fillMaxHeight()
                                     )
                                 }
                             }
                         } else {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp)),
-                                color = MaterialTheme.colorScheme.surfaceVariant
-                            ) {
-                                Column(
+                            // Mobile Variations List
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Checklist,
-                                        contentDescription = null,
-                                        tint = SecondaryCyan,
-                                        modifier = Modifier.size(44.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "${variations.size} Generated Variations",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Tap any card to compare before / after",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    val unsyncedCount = variations.count { !it.isSyncedToCloud }
+                                    if (unsyncedCount > 0) {
+                                        OutlinedButton(
+                                            onClick = { viewModel.syncAllUnsyncedToCloud() },
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.testTag("sync_all_variations_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CloudQueue,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = SecondaryCyan
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(text = "Sync ($unsyncedCount)", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+
+                                if (variations.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Icon(
+                                                imageVector = Icons.Default.Palette,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.outline,
+                                                modifier = Modifier.size(64.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text(
+                                                text = "No Variations Generated Yet",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = "Select photos and pick a style to create variations!",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(2),
+                                        contentPadding = PaddingValues(16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        items(variations, key = { it.id }) { variation ->
+                                            VariationCard(
+                                                variation = variation,
+                                                onClick = { inspectVariation = variation },
+                                                onSyncCloud = { viewModel.syncSingleVariationToCloud(variation.id) },
+                                                onSaveToDevice = { viewModel.exportVariationToGallery(variation) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    3 -> {
+                        // TAB 4: Batch Queue & Task Inspector
+                        if (isTablet) {
+                            // Two-Pane Canonical Layout for Batch Queue & Telemetry
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Left Pane: Active Task & Animated Circular Gauges
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                ) {
                                     Text(
-                                        text = "No Ongoing Batch Tasks",
-                                        style = MaterialTheme.typography.titleMedium,
+                                        text = "Batch Pipeline Status",
+                                        style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "${selectedIds.size} photos currently selected. Drop onto batch zone to start!",
+                                        text = "Real-time AI transform & cloud sync telemetry",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    if (activeTask != null) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(16.dp)),
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            tonalElevation = 4.dp
+                                        ) {
+                                            Column(modifier = Modifier.padding(16.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = activeTask?.title ?: "Active Task",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+
+                                                    Button(
+                                                        onClick = { viewModel.cancelBatchProcessing() },
+                                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    ) {
+                                                        Text("Cancel", fontSize = 12.sp)
+                                                    }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = "Current: ${activeTask?.currentPhotoTitle}",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = SecondaryCyan
+                                                )
+                                                Text(
+                                                    text = activeTask?.currentStepDescription ?: "",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+
+                                                Spacer(modifier = Modifier.height(12.dp))
+
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .background(MaterialTheme.colorScheme.surface)
+                                                        .padding(14.dp),
+                                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    CircularProgressGauge(
+                                                        label = "AI Transform",
+                                                        progress = transformProgress,
+                                                        color = PrimaryVioletLight,
+                                                        trackColor = PrimaryViolet.copy(alpha = 0.2f),
+                                                        icon = Icons.Default.AutoAwesome,
+                                                        testTag = "tab_transform_gauge"
+                                                    )
+
+                                                    CircularProgressGauge(
+                                                        label = "Cloud Sync",
+                                                        progress = uploadProgress,
+                                                        color = SecondaryCyan,
+                                                        trackColor = SecondaryCyan.copy(alpha = 0.2f),
+                                                        icon = Icons.Default.CloudUpload,
+                                                        testTag = "tab_upload_gauge"
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                Text(
+                                                    text = "Completed ${activeTask?.completedItems} of ${activeTask?.totalItems}",
+                                                    style = MaterialTheme.typography.labelSmall
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(16.dp)),
+                                            color = MaterialTheme.colorScheme.surfaceVariant
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(24.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Checklist,
+                                                    contentDescription = null,
+                                                    tint = SecondaryCyan,
+                                                    modifier = Modifier.size(44.dp)
+                                                )
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                Text(
+                                                    text = "No Ongoing Batch Tasks",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = "${selectedIds.size} photos currently selected. Drop onto batch zone to start!",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Right Pane: Storage and Queue Telemetry
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                ) {
+                                    Text(
+                                        text = "Queue & Storage Overview",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Device storage and batch statistics",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp)),
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        tonalElevation = 2.dp
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Text(
+                                                text = "Queue Statistics",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Photos in Library:", style = MaterialTheme.typography.bodyMedium)
+                                                Text("${photos.size}", fontWeight = FontWeight.Bold)
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Selected for Batch:", style = MaterialTheme.typography.bodyMedium)
+                                                Text("${selectedIds.size}", fontWeight = FontWeight.Bold, color = PrimaryVioletLight)
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Active Style Preset:", style = MaterialTheme.typography.bodyMedium)
+                                                Text(selectedStyle.name, fontWeight = FontWeight.Bold, color = SecondaryCyan)
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Cloud Sync Enabled:", style = MaterialTheme.typography.bodyMedium)
+                                                Text(
+                                                    if (storageConfig.isCloudSyncEnabled) "Active" else "Local Only",
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (storageConfig.isCloudSyncEnabled) SecondaryCyan else MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(16.dp))
+
+                                            Button(
+                                                onClick = { showStorageSheet = true },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Tune,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Configure Storage & Sync")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Mobile Batch Queue View
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp)
+                            ) {
+                                Text(
+                                    text = "Batch Queue & Tasks",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Monitor and control ongoing batch operations",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                if (activeTask != null) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp)),
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        tonalElevation = 4.dp
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = activeTask?.title ?: "Active Task",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+
+                                                Button(
+                                                    onClick = { viewModel.cancelBatchProcessing() },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                                    shape = RoundedCornerShape(8.dp)
+                                                ) {
+                                                    Text("Cancel", fontSize = 12.sp)
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "Current: ${activeTask?.currentPhotoTitle}",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = SecondaryCyan
+                                            )
+                                            Text(
+                                                text = activeTask?.currentStepDescription ?: "",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+
+                                            Spacer(modifier = Modifier.height(10.dp))
+
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(MaterialTheme.colorScheme.surface)
+                                                    .padding(12.dp),
+                                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                CircularProgressGauge(
+                                                    label = "AI Transform",
+                                                    progress = transformProgress,
+                                                    color = PrimaryVioletLight,
+                                                    trackColor = PrimaryViolet.copy(alpha = 0.2f),
+                                                    icon = Icons.Default.AutoAwesome,
+                                                    testTag = "tab_transform_gauge"
+                                                )
+
+                                                CircularProgressGauge(
+                                                    label = "Cloud Sync",
+                                                    progress = uploadProgress,
+                                                    color = SecondaryCyan,
+                                                    trackColor = SecondaryCyan.copy(alpha = 0.2f),
+                                                    icon = Icons.Default.CloudUpload,
+                                                    testTag = "tab_upload_gauge"
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            Text(
+                                                text = "Completed ${activeTask?.completedItems} of ${activeTask?.totalItems}",
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp)),
+                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(24.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Checklist,
+                                                contentDescription = null,
+                                                tint = SecondaryCyan,
+                                                modifier = Modifier.size(44.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            Text(
+                                                text = "No Ongoing Batch Tasks",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "${selectedIds.size} photos currently selected. Drop onto batch zone to start!",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

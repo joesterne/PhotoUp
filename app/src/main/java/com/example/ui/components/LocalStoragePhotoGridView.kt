@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -122,7 +123,6 @@ fun LocalStoragePhotoGridView(
     onDrag: ((Offset) -> Unit)? = null,
     onDragEnd: (() -> Unit)? = null
 ) {
-    var gridColumns by remember { mutableIntStateOf(2) }
     var selectedFilter by remember { mutableStateOf("All Local") }
     var inspectedPhoto by remember { mutableStateOf<PhotoItem?>(null) }
 
@@ -152,11 +152,21 @@ fun LocalStoragePhotoGridView(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .testTag("local_storage_grid_view")
     ) {
+        val availableWidth = maxWidth
+        val defaultColumns = when {
+            availableWidth >= 900.dp -> 4
+            availableWidth >= 560.dp -> 3
+            else -> 2
+        }
+        var gridColumns by remember(availableWidth >= 560.dp, availableWidth >= 900.dp) {
+            mutableIntStateOf(defaultColumns)
+        }
+
         Column(modifier = Modifier.fillMaxSize()) {
             // Header: Local Storage Info & View Mode Controls
             Row(
@@ -204,15 +214,21 @@ fun LocalStoragePhotoGridView(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Toggle grid columns: 2 columns vs 3 columns
+                    // Toggle grid columns: cycles between 2, 3, 4 columns
                     IconButton(
-                        onClick = { gridColumns = if (gridColumns == 2) 3 else 2 },
+                        onClick = {
+                            gridColumns = when {
+                                availableWidth >= 900.dp -> if (gridColumns == 4) 5 else if (gridColumns == 5) 3 else 4
+                                availableWidth >= 560.dp -> if (gridColumns == 3) 4 else if (gridColumns == 4) 2 else 3
+                                else -> if (gridColumns == 2) 3 else 2
+                            }
+                        },
                         modifier = Modifier
                             .size(36.dp)
                             .testTag("local_grid_columns_toggle")
                     ) {
                         Icon(
-                            imageVector = if (gridColumns == 2) Icons.Default.ViewModule else Icons.Default.GridView,
+                            imageVector = if (gridColumns <= 2) Icons.Default.ViewModule else Icons.Default.GridView,
                             contentDescription = "Toggle Grid Columns (${gridColumns} columns active)",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)

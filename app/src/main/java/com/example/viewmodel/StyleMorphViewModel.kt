@@ -112,7 +112,8 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
      *  hardcoded 42.8 MB / 128.4 MB constants as if they were usage. */
     private fun refreshLocalStorageUsage() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val dir = java.io.File(application.filesDir, "variations")
+            val app = getApplication<Application>()
+            val dir = java.io.File(app.filesDir, "variations")
             val bytes = if (dir.exists()) {
                 dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
             } else {
