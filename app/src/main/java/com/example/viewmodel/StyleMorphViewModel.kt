@@ -113,11 +113,12 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
     private fun refreshLocalStorageUsage() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val app = getApplication<Application>()
-            val dir = java.io.File(app.filesDir, "variations")
-            val bytes = if (dir.exists()) {
+            val dirs = listOf(
+                java.io.File(app.filesDir, "variations"),
+                java.io.File(app.filesDir, "Pictures/StyleMorph")
+            )
+            val bytes = dirs.filter { it.exists() }.sumOf { dir ->
                 dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-            } else {
-                0L
             }
             val mb = Math.round(bytes / 104857.6) / 10f
             _storageConfig.value = _storageConfig.value.copy(localStorageUsedMb = mb)
@@ -140,6 +141,30 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
             current.add(photoId)
         }
         _selectedPhotoIds.value = current
+    }
+
+    /**
+     * Explicitly sets selection state for a photo ID during drag-selection gestures in LazyVerticalGrid.
+     */
+    fun setPhotoSelection(photoId: String, selected: Boolean) {
+        val current = _selectedPhotoIds.value.toMutableSet()
+        val changed = if (selected) current.add(photoId) else current.remove(photoId)
+        if (changed) {
+            _selectedPhotoIds.value = current
+        }
+    }
+
+    /**
+     * Selects a predefined AI style transformation filter and applies it to currently selected images.
+     */
+    fun applyStyleFilterToSelected(style: StylePreset) {
+        _selectedStyle.value = style
+        val targets = _selectedPhotoIds.value.toList()
+        if (targets.isNotEmpty()) {
+            startBatchProcessing(targets, style)
+        } else {
+            showSnackbar("Active filter set to '${style.name}'. Select photos in the grid to transform!")
+        }
     }
 
     fun selectAllPhotos() {
@@ -586,10 +611,45 @@ class StyleMorphViewModel(application: Application) : AndroidViewModel(applicati
     fun exportVariationToGallery(variation: VariationResult) {
         viewModelScope.launch {
             val success = imageEngine.exportToDeviceGallery(variation)
+            _variations.value = _variations.value.map { item ->
+                if (item.id == variation.id) item.copy(isSavedLocally = true) else item
+            }
+            refreshLocalStorageUsage()
             if (success) {
-                showSnackbar("Saved variation to device Pictures/StyleMorph gallery!")
+                showSnackbar("Saved '${variation.photoTitle}' (${variation.styleName}) to device Gallery!")
             } else {
-                showSnackbar("Saved to local storage sandbox.")
+                showSnackbar("Saved '${variation.photoTitle}' to local storage.")
+            }
+        }
+    }
+
+    fun exportAllVariationsToGallery() {
+        val currentList = _variations.value
+        if (currentList.isEmpty()) {
+            showSnackbar("No variations to save yet.")
+            return
+        }
+        viewModelScope.launch {
+            var exportedCount = 0
+            for (variation in currentList) {
+                if (imageEngine.exportToDeviceGallery(variation)) {
+                    exportedCount++
+                }
+            }
+            _variations.value = _variations.value.map { it.copy(isSavedLocally = true) }
+            refreshLocalStorageUsage()
+            showSnackbar("Saved $exportedCount transformed AI images to device Gallery (Pictures/StyleMorph)!")
+        }
+    }
+
+    fun shareVariation(variation: VariationResult) {
+        viewModelScope.launch {
+            val shared = imageEngine.shareVariationImage(variation)
+            refreshLocalStorageUsage()
+            if (shared) {
+                showSnackbar("Sharing '${variation.photoTitle}' (${variation.styleName})...")
+            } else {
+                showSnackbar("Prepared '${variation.photoTitle}' for sharing.")
             }
         }
     }

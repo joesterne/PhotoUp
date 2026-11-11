@@ -9,6 +9,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +52,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -72,6 +75,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,6 +96,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.PhotoItem
+import com.example.data.SamplePhotoLibrary
 import com.example.data.StylePreset
 import com.example.ui.theme.AccentAmber
 import com.example.ui.theme.AccentEmerald
@@ -119,12 +124,18 @@ fun LocalStoragePhotoGridView(
     onScanLocalStorage: () -> Unit,
     onOpenStyleDialog: () -> Unit,
     modifier: Modifier = Modifier,
+    styles: List<StylePreset> = SamplePhotoLibrary.popularStyles,
+    onSelectStyle: ((StylePreset) -> Unit)? = null,
+    onSetPhotoSelection: ((String, Boolean) -> Unit)? = null,
     onDragStart: ((PhotoItem, Offset) -> Unit)? = null,
     onDrag: ((Offset) -> Unit)? = null,
     onDragEnd: (() -> Unit)? = null
 ) {
     var selectedFilter by remember { mutableStateOf("All Local") }
     var inspectedPhoto by remember { mutableStateOf<PhotoItem?>(null) }
+    var isDragSelectMode by remember { mutableStateOf(false) }
+    var isLiveFilterPreviewEnabled by remember { mutableStateOf(true) }
+    val lazyGridState = rememberLazyGridState()
 
     val filterOptions = listOf(
         "All Local",
@@ -151,6 +162,9 @@ fun LocalStoragePhotoGridView(
             }
         }
     }
+
+    val currentFilteredPhotos by rememberUpdatedState(filteredPhotos)
+    val currentSelectedIds by rememberUpdatedState(selectedPhotoIds)
 
     BoxWithConstraints(
         modifier = modifier
@@ -203,9 +217,13 @@ fun LocalStoragePhotoGridView(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "${photos.size} items · ${selectedPhotoIds.size} queued for batch",
+                            text = if (isDragSelectMode) {
+                                "Drag-Select active · Glide across grid to select"
+                            } else {
+                                "${photos.size} items · ${selectedPhotoIds.size} queued for ${activeStylePreset.name}"
+                            },
                             fontSize = 12.sp,
-                            color = if (selectedPhotoIds.isNotEmpty()) PrimaryVioletLight else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isDragSelectMode) SecondaryCyan else if (selectedPhotoIds.isNotEmpty()) PrimaryVioletLight else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -214,6 +232,44 @@ fun LocalStoragePhotoGridView(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Drag-Select Mode Toggle (glide finger across LazyVerticalGrid to batch select)
+                    IconButton(
+                        onClick = { isDragSelectMode = !isDragSelectMode },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isDragSelectMode) SecondaryCyan.copy(alpha = 0.2f) else Color.Transparent
+                            )
+                            .testTag("local_grid_drag_select_mode_toggle")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TouchApp,
+                            contentDescription = "Toggle Drag-Select Mode",
+                            tint = if (isDragSelectMode) SecondaryCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Live Style Filter Preview Toggle on Selected Grid Items
+                    IconButton(
+                        onClick = { isLiveFilterPreviewEnabled = !isLiveFilterPreviewEnabled },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isLiveFilterPreviewEnabled) PrimaryViolet.copy(alpha = 0.2f) else Color.Transparent
+                            )
+                            .testTag("local_grid_live_filter_preview_toggle")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = "Toggle Live Style Filter Preview",
+                            tint = if (isLiveFilterPreviewEnabled) PrimaryVioletLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     // Toggle grid columns: cycles between 2, 3, 4 columns
                     IconButton(
                         onClick = {
@@ -430,17 +486,67 @@ fun LocalStoragePhotoGridView(
                 }
             } else {
                 LazyVerticalGrid(
+                    state = lazyGridState,
                     columns = GridCells.Fixed(gridColumns),
                     contentPadding = PaddingValues(
                         start = 16.dp,
                         end = 16.dp,
                         top = 8.dp,
-                        bottom = if (selectedPhotoIds.isNotEmpty()) 90.dp else 24.dp
+                        bottom = if (selectedPhotoIds.isNotEmpty()) 136.dp else 24.dp
                     ),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier
                         .fillMaxSize()
+                        .pointerInput(isDragSelectMode) {
+                            if (isDragSelectMode) {
+                                var dragTargetSelectState = true
+                                var lastTouchedId: String? = null
+
+                                fun findPhotoIdAtOffset(pos: Offset): String? {
+                                    val hitItem = lazyGridState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
+                                        val left = itemInfo.offset.x.toFloat()
+                                        val top = itemInfo.offset.y.toFloat()
+                                        val right = left + itemInfo.size.width
+                                        val bottom = top + itemInfo.size.height
+                                        pos.x in left..right && pos.y in top..bottom
+                                    }
+                                    return hitItem?.let { info ->
+                                        currentFilteredPhotos.getOrNull(info.index)?.id
+                                    }
+                                }
+
+                                detectDragGestures(
+                                    onDragStart = { startOffset ->
+                                        val hitId = findPhotoIdAtOffset(startOffset)
+                                        if (hitId != null) {
+                                            lastTouchedId = hitId
+                                            dragTargetSelectState = !currentSelectedIds.contains(hitId)
+                                            if (onSetPhotoSelection != null) {
+                                                onSetPhotoSelection(hitId, dragTargetSelectState)
+                                            } else {
+                                                onToggleSelect(hitId)
+                                            }
+                                        }
+                                    },
+                                    onDrag = { change, _ ->
+                                        change.consume()
+                                        val hitId = findPhotoIdAtOffset(change.position)
+                                        if (hitId != null && hitId != lastTouchedId) {
+                                            lastTouchedId = hitId
+                                            val isCurrSelected = currentSelectedIds.contains(hitId)
+                                            if (onSetPhotoSelection != null) {
+                                                onSetPhotoSelection(hitId, dragTargetSelectState)
+                                            } else if (isCurrSelected != dragTargetSelectState) {
+                                                onToggleSelect(hitId)
+                                            }
+                                        }
+                                    },
+                                    onDragEnd = { lastTouchedId = null },
+                                    onDragCancel = { lastTouchedId = null }
+                                )
+                            }
+                        }
                         .testTag("local_photos_lazy_grid")
                 ) {
                     items(filteredPhotos, key = { it.id }) { photo ->
@@ -449,28 +555,29 @@ fun LocalStoragePhotoGridView(
                             photo = photo,
                             isSelected = isSelected,
                             isCompact = gridColumns == 3,
+                            activeStyleFilterPreview = if (isSelected && isLiveFilterPreviewEnabled) activeStylePreset else null,
                             onToggleSelect = { onToggleSelect(photo.id) },
                             onInspect = { inspectedPhoto = photo },
-                            onDragStart = onDragStart,
-                            onDrag = onDrag,
-                            onDragEnd = onDragEnd
+                            onDragStart = if (isDragSelectMode) null else onDragStart,
+                            onDrag = if (isDragSelectMode) null else onDrag,
+                            onDragEnd = if (isDragSelectMode) null else onDragEnd
                         )
                     }
                 }
             }
         }
 
-        // Sticky Batch Workflow Processing Action Bar
+        // Sticky Batch Workflow Processing Action Bar with Predefined AI Style Transformation Filters
         AnimatedVisibility(
             visible = selectedPhotoIds.isNotEmpty(),
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Surface(
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp),
                 tonalElevation = 8.dp,
                 shadowElevation = 10.dp,
@@ -479,106 +586,167 @@ fun LocalStoragePhotoGridView(
                     .fillMaxWidth()
                     .testTag("local_grid_batch_action_bar")
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Selection Badge & Preset summary
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
+                    // Quick Predefined AI Style Transformation Filters Strip (e.g. Cyberpunk, Oil Painting, Vintage Film)
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("local_grid_style_filter_row"),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(styles, key = { it.id }) { style ->
+                            val isStyleActive = style.id == activeStylePreset.id
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isStyleActive) {
+                                    Color(style.primaryColor).copy(alpha = 0.25f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                },
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = if (isStyleActive) 1.5.dp else 0.5.dp,
+                                    color = if (isStyleActive) Color(style.primaryColor) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                ),
                                 modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(PrimaryViolet),
-                                contentAlignment = Alignment.Center
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        onSelectStyle?.invoke(style) ?: onOpenStyleDialog()
+                                    }
+                                    .testTag("grid_style_filter_chip_${style.id}")
                             ) {
-                                Text(
-                                    text = "${selectedPhotoIds.size}",
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        Color(style.primaryColor),
+                                                        Color(style.secondaryColor)
+                                                    )
+                                                )
+                                            )
+                                    )
+                                    Text(
+                                        text = style.name,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isStyleActive) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isStyleActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                            Text(
-                                text = "Selected for Batch",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        // Active style preset chip
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .padding(top = 2.dp)
-                                .clickable { onOpenStyleDialog() }
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(activeStylePreset.primaryColor))
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Style: ${activeStylePreset.name}",
-                                fontSize = 11.sp,
-                                color = PrimaryVioletLight,
-                                fontWeight = FontWeight.Medium
-                            )
                         }
                     }
 
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Clear Selection
-                        IconButton(
-                            onClick = onClearSelection,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .testTag("local_grid_clear_selection_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Clear Selection",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
+                        // Selection Badge & Preset summary
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(PrimaryViolet),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${selectedPhotoIds.size}",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "Selected for Batch",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            // Active style preset chip
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .padding(top = 2.dp)
+                                    .clickable { onOpenStyleDialog() }
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(activeStylePreset.primaryColor))
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Filter: ${activeStylePreset.name} · Tap to browse all",
+                                    fontSize = 11.sp,
+                                    color = PrimaryVioletLight,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
 
-                        // Primary Action: Start Batch Processing
-                        Button(
-                            onClick = {
-                                onStartBatchProcess(selectedPhotoIds.toList(), activeStylePreset)
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
-                            shape = RoundedCornerShape(14.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                            modifier = Modifier.testTag("local_grid_process_batch_button")
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = AccentAmber,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Batch Morph",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            // Clear Selection
+                            IconButton(
+                                onClick = onClearSelection,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("local_grid_clear_selection_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear Selection",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            // Primary Action: Start Batch Processing with Selected Style Filter
+                            Button(
+                                onClick = {
+                                    onStartBatchProcess(selectedPhotoIds.toList(), activeStylePreset)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
+                                shape = RoundedCornerShape(14.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                modifier = Modifier.testTag("local_grid_process_batch_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = AccentAmber,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Batch Morph",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }
@@ -608,7 +776,7 @@ fun LocalStoragePhotoGridView(
 /**
  * Individual photo card item rendered within the Local Storage GridView.
  * Supports image loading via Coil (with fallback gradient art), multi-select checkbox,
- * aesthetic heuristic indicators, and long-press inspection.
+ * live AI style filter preview overlay, aesthetic heuristic indicators, and long-press inspection.
  */
 @Composable
 fun LocalStoragePhotoCard(
@@ -620,7 +788,8 @@ fun LocalStoragePhotoCard(
     onDragStart: ((PhotoItem, Offset) -> Unit)? = null,
     onDrag: ((Offset) -> Unit)? = null,
     onDragEnd: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    activeStyleFilterPreview: StylePreset? = null
 ) {
     var cardBoundsInWindow by remember { mutableStateOf(Rect.Zero) }
 
@@ -629,7 +798,11 @@ fun LocalStoragePhotoCard(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = androidx.compose.foundation.BorderStroke(
             width = if (isSelected) 2.5.dp else 1.dp,
-            color = if (isSelected) PrimaryViolet else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+            color = if (isSelected) {
+                activeStyleFilterPreview?.let { Color(it.primaryColor) } ?: PrimaryViolet
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+            }
         ),
         shadowElevation = if (isSelected) 6.dp else 1.dp,
         modifier = modifier
@@ -638,7 +811,7 @@ fun LocalStoragePhotoCard(
             .onGloballyPositioned { coords ->
                 cardBoundsInWindow = coords.boundsInWindow()
             }
-            .pointerInput(photo.id) {
+            .pointerInput(photo.id, onDragStart != null) {
                 if (onDragStart != null && onDrag != null && onDragEnd != null) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = { localOffset ->
@@ -708,6 +881,22 @@ fun LocalStoragePhotoCard(
                 }
             }
 
+            // Live Predefined AI Style Filter Preview Overlay on Selected Grid Items
+            if (isSelected && activeStyleFilterPreview != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Color(activeStyleFilterPreview.primaryColor).copy(alpha = 0.32f),
+                                    Color(activeStyleFilterPreview.secondaryColor).copy(alpha = 0.28f)
+                                )
+                            )
+                        )
+                )
+            }
+
             // Top Badges Row: Quality Heuristic & Selection Toggle
             Row(
                 modifier = Modifier
@@ -716,28 +905,48 @@ fun LocalStoragePhotoCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                // Aesthetic Score Pill
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.Black.copy(alpha = 0.65f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Aesthetic Score Pill
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.65f)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = AccentAmber,
-                            modifier = Modifier.size(10.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "${(photo.aestheticScore * 100).toInt()}%",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = AccentAmber,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "${(photo.aestheticScore * 100).toInt()}%",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    // Active AI Style Transformation Filter Pill on Selected Photo
+                    if (isSelected && activeStyleFilterPreview != null) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(activeStyleFilterPreview.primaryColor).copy(alpha = 0.9f)
+                        ) {
+                            Text(
+                                text = "✨ ${activeStyleFilterPreview.name}",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            )
+                        }
                     }
                 }
 

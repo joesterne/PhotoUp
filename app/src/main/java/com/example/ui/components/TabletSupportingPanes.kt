@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
@@ -538,6 +539,7 @@ fun TabletVariationDetailPane(
     onClose: () -> Unit,
     onSyncCloud: () -> Unit,
     onSaveToDevice: () -> Unit,
+    onShare: () -> Unit = {},
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -634,7 +636,7 @@ fun TabletVariationDetailPane(
                 }
             }
 
-            // Actions: Save to device gallery, Sync cloud, Delete
+            // Primary Export Actions: Save to Gallery & Share
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -645,11 +647,34 @@ fun TabletVariationDetailPane(
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
                     modifier = Modifier.weight(1f).testTag("tablet_export_gallery_button")
                 ) {
-                    Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(imageVector = Icons.Default.Download, contentDescription = "Save to Gallery", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Export", fontSize = 12.sp)
+                    Text("Save to Gallery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
+                Button(
+                    onClick = onShare,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SecondaryCyan),
+                    modifier = Modifier.weight(1f).testTag("tablet_share_variation_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share Variation",
+                        tint = Color.Black,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Share", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                }
+            }
+
+            // Secondary Actions: Sync cloud & Delete
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedButton(
                     onClick = onSyncCloud,
                     shape = RoundedCornerShape(12.dp),
@@ -661,7 +686,7 @@ fun TabletVariationDetailPane(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = if (variation.isSyncedToCloud) "Synced" else "Cloud", fontSize = 12.sp)
+                    Text(text = if (variation.isSyncedToCloud) "Synced" else "Sync Cloud", fontSize = 12.sp)
                 }
 
                 IconButton(

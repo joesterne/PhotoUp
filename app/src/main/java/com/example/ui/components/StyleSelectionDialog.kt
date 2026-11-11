@@ -96,9 +96,9 @@ fun StyleSelectionDialog(
         val matchesCategory = when (selectedCategory) {
             "All" -> true
             "Trending" -> preset.tag.contains("Trending", ignoreCase = true) || preset.tag.contains("Favorite", ignoreCase = true)
-            "Fine Art" -> preset.id in listOf("renaissance", "watercolor")
+            "Fine Art" -> preset.id in listOf("oil_painting", "renaissance", "watercolor")
             "Animation & 3D" -> preset.id in listOf("anime_ghibli", "pixar_3d")
-            "Retro" -> preset.id in listOf("vintage_polaroid", "synthwave")
+            "Retro" -> preset.id in listOf("vintage_film", "vintage_polaroid", "synthwave")
             "Graphic" -> preset.id in listOf("pop_art", "cyberpunk")
             else -> true
         }

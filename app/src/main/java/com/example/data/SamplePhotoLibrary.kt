@@ -5,14 +5,36 @@ object SamplePhotoLibrary {
     val popularStyles = listOf(
         StylePreset(
             id = "cyberpunk",
-            name = "Cyberpunk Neon",
-            subtitle = "Futuristic Night & Holograms",
+            name = "Cyberpunk",
+            subtitle = "Futuristic Night & Neon Holograms",
             description = "Rain-slicked asphalt, vibrant neon cyan & hot magenta edge lighting, reflective surfaces, and high contrast futuristic cityscape aesthetics.",
             promptModifiers = "cyberpunk style, neon cyan and magenta lighting, rain reflections, volumetric fog, futuristic details, ray-traced reflections",
             primaryColor = 0xFF06B6D4,
             secondaryColor = 0xFFEC4899,
             iconKey = "bolt",
             tag = "Trending #1"
+        ),
+        StylePreset(
+            id = "oil_painting",
+            name = "Oil Painting",
+            subtitle = "Textured Impasto & Canvas Glaze",
+            description = "Thick palette-knife impasto brushstrokes, rich linseed oil pigment depth, warm gallery lighting, and tactile woven linen canvas texture.",
+            promptModifiers = "expressive oil painting on canvas, thick impasto brushwork, palette knife texture, rich oil pigments, museum gallery lighting, fine art masterpiece",
+            primaryColor = 0xFFD97706,
+            secondaryColor = 0xFF9A3412,
+            iconKey = "brush",
+            tag = "Fine Art"
+        ),
+        StylePreset(
+            id = "vintage_film",
+            name = "Vintage Film",
+            subtitle = "35mm Analog Kodachrome & Halation",
+            description = "Authentic 35mm analog cinema film stock, warm golden halation around highlights, organic silver halide grain, and timeless nostalgic color grading.",
+            promptModifiers = "35mm vintage film photography, Kodachrome 64 color grading, warm highlight halation, organic silver film grain, analog cinema lens character",
+            primaryColor = 0xFFEAB308,
+            secondaryColor = 0xFFB45309,
+            iconKey = "camera_roll",
+            tag = "Analog Film"
         ),
         StylePreset(
             id = "anime_ghibli",
@@ -28,10 +50,10 @@ object SamplePhotoLibrary {
         StylePreset(
             id = "renaissance",
             name = "Renaissance Oil",
-            subtitle = "Classical Masterpiece Impasto",
+            subtitle = "Classical Masterpiece Chiaroscuro",
             description = "Dramatic chiaroscuro shadow contrasts, rich textured canvas brushstrokes, warm amber glaze, and timeless museum fine-art lighting.",
             promptModifiers = "Renaissance oil painting, chiaroscuro lighting, Rembrandt palette, rich canvas texture, classical masterpiece brushwork, cracked lacquer glaze",
-            primaryColor = 0xFFD97706,
+            primaryColor = 0xFFB45309,
             secondaryColor = 0xFF78350F,
             iconKey = "brush",
             tag = "Classical"

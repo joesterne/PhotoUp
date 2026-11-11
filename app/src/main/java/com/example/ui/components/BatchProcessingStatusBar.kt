@@ -78,6 +78,8 @@ fun BatchProcessingStatusBar(
     uploadProgress: Float,
     queueItems: List<QueueItemProgress>,
     onCancel: () -> Unit,
+    onSaveAllToGallery: (() -> Unit)? = null,
+    onShareLatest: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(true) }
@@ -285,6 +287,78 @@ fun BatchProcessingStatusBar(
                                     index = index,
                                     item = item
                                 )
+                            }
+                        }
+
+                        if (transformProgress >= 1.0f && (onSaveAllToGallery != null || onShareLatest != null)) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (onSaveAllToGallery != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = PrimaryViolet,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { onSaveAllToGallery() }
+                                            .testTag("status_bar_save_to_gallery_button")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = "Save to Gallery",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Save to Gallery",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+                                }
+                                if (onShareLatest != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = SecondaryCyan,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { onShareLatest() }
+                                            .testTag("status_bar_share_button")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                                contentDescription = "Share",
+                                                tint = Color.Black,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Share",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

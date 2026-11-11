@@ -249,6 +249,63 @@ class ImageProcessingEngine(private val context: Context) {
                 canvas.drawCircle(360f, 300f, 150f, paint)
                 canvas.drawCircle(480f, 330f, 110f, paint)
             }
+            "oil_painting" -> {
+                // Impasto brushstrokes and warm canvas texture
+                paint.style = Paint.Style.FILL
+                val strokeColors = intArrayOf(
+                    Color.argb(180, 217, 119, 6),
+                    Color.argb(170, 154, 52, 18),
+                    Color.argb(160, 245, 158, 11),
+                    Color.argb(150, 120, 53, 15)
+                )
+                for (row in 0..height step 36) {
+                    for (col in 0..width step 48) {
+                        paint.color = strokeColors[((row + col) / 36) % strokeColors.size]
+                        canvas.drawRoundRect(
+                            col.toFloat() - 12f,
+                            row.toFloat() - 8f,
+                            col.toFloat() + 44f,
+                            row.toFloat() + 24f,
+                            14f,
+                            14f,
+                            paint
+                        )
+                    }
+                }
+                // Warm gallery glaze vignette
+                val glaze = RadialGradient(
+                    width / 2f, height / 2f, 520f,
+                    intArrayOf(Color.argb(70, 254, 243, 199), Color.argb(140, 146, 64, 14), Color.argb(220, 28, 25, 23)),
+                    floatArrayOf(0f, 0.65f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+                paint.shader = glaze
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+                paint.shader = null
+            }
+            "vintage_film" -> {
+                // 35mm Kodachrome warm halation & film sprocket frame
+                val halation = RadialGradient(
+                    width * 0.65f, height * 0.35f, 480f,
+                    intArrayOf(Color.argb(180, 254, 240, 138), Color.argb(120, 234, 179, 8), Color.argb(180, 69, 26, 3)),
+                    floatArrayOf(0f, 0.55f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+                paint.shader = halation
+                paint.style = Paint.Style.FILL
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+                paint.shader = null
+
+                // Subtle analog film grain & 35mm sprocket holes along edges
+                paint.color = Color.argb(210, 20, 16, 12)
+                canvas.drawRect(0f, 0f, 44f, height.toFloat(), paint)
+                canvas.drawRect(width - 44f, 0f, width.toFloat(), height.toFloat(), paint)
+                paint.color = Color.argb(200, 254, 243, 199)
+                for (y in 24..height step 56) {
+                    canvas.drawRoundRect(10f, y.toFloat(), 34f, (y + 28).toFloat(), 4f, 4f, paint)
+                    canvas.drawRoundRect(width - 34f, y.toFloat(), width - 10f, (y + 28).toFloat(), 4f, 4f, paint)
+                }
+            }
             "renaissance" -> {
                 // Chiaroscuro vignette
                 val vignette = RadialGradient(
@@ -348,11 +405,43 @@ class ImageProcessingEngine(private val context: Context) {
     }
 
     /**
-     * Exports a variation to the device's public photo gallery (MediaStore).
+     * Resolves the transformed Bitmap for a variation from its saved file path,
+     * falling back to procedural artistic rendering if the file is unavailable.
+     */
+    private fun resolveVariationBitmap(variation: VariationResult): Bitmap {
+        val savedPath = variation.localFilePath
+        val savedBitmap = if (!savedPath.isNullOrBlank()) {
+            BitmapFactory.decodeFile(savedPath)
+        } else {
+            null
+        }
+        return savedBitmap ?: run {
+            val photo = SamplePhotoLibrary.initialPhotos.find { it.id == variation.photoId }
+                ?: SamplePhotoLibrary.initialPhotos.first()
+            val style = SamplePhotoLibrary.popularStyles.find { it.id == variation.styleId }
+                ?: SamplePhotoLibrary.popularStyles.first()
+            renderArtisticBitmap(photo, style, 0.9f)
+        }
+    }
+
+    /**
+     * Exports a variation to the device's public photo gallery (MediaStore Pictures/StyleMorph)
+     * with a fallback copy in app-local Pictures/StyleMorph storage so export always succeeds.
      */
     suspend fun exportToDeviceGallery(variation: VariationResult): Boolean = withContext(Dispatchers.IO) {
         try {
-            val filename = "StyleMorph_${variation.styleName.replace(" ", "_")}_${System.currentTimeMillis()}.png"
+            val sanitizedStyle = variation.styleName.replace(Regex("[^A-Za-z0-9_]"), "_")
+            val filename = "StyleMorph_${sanitizedStyle}_${System.currentTimeMillis()}.png"
+            val bitmap = resolveVariationBitmap(variation)
+
+            // Always ensure a local gallery export copy exists in Pictures/StyleMorph
+            val localGalleryDir = File(context.filesDir, "Pictures/StyleMorph")
+            if (!localGalleryDir.exists()) localGalleryDir.mkdirs()
+            val localExportFile = File(localGalleryDir, filename)
+            FileOutputStream(localExportFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+
             val resolver = context.contentResolver
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
@@ -364,38 +453,84 @@ class ImageProcessingEngine(private val context: Context) {
             }
 
             val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                ?: return@withContext false
-
-            resolver.openOutputStream(uri)?.use { stream ->
-                // Export the variation's actual saved image. (Previously this
-                // re-rendered a bitmap from the sample library by photo/style
-                // id, so exporting any real/generated photo saved a wrong,
-                // sample-based image instead.)
-                val savedPath = variation.localFilePath
-                val savedBitmap = if (!savedPath.isNullOrBlank()) {
-                    BitmapFactory.decodeFile(savedPath)
-                } else {
-                    null
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { stream ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
                 }
-                val bitmap = savedBitmap ?: run {
-                    // Legacy fallback for variations with no saved file.
-                    val photo = SamplePhotoLibrary.initialPhotos.find { it.id == variation.photoId }
-                        ?: SamplePhotoLibrary.initialPhotos.first()
-                    val style = SamplePhotoLibrary.popularStyles.find { it.id == variation.styleId }
-                        ?: SamplePhotoLibrary.popularStyles.first()
-                    renderArtisticBitmap(photo, style, 0.9f)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    contentValues.clear()
+                    contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, contentValues, null, null)
                 }
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                contentValues.clear()
-                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                resolver.update(uri, contentValues, null, null)
-            }
-            true
+            localExportFile.exists() && localExportFile.length() > 0L
         } catch (e: Exception) {
             Log.e("ImageProcessingEngine", "Error exporting to gallery: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Shares a transformed AI variation image using the Android system Share sheet (Intent.ACTION_SEND).
+     */
+    suspend fun shareVariationImage(variation: VariationResult): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val sanitizedStyle = variation.styleName.replace(Regex("[^A-Za-z0-9_]"), "_")
+            val filename = "StyleMorph_Share_${sanitizedStyle}_${System.currentTimeMillis()}.png"
+            val bitmap = resolveVariationBitmap(variation)
+
+            val shareDir = File(context.filesDir, "Pictures/StyleMorph")
+            if (!shareDir.exists()) shareDir.mkdirs()
+            val shareFile = File(shareDir, filename)
+            FileOutputStream(shareFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+
+            val resolver = context.contentResolver
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/StyleMorph")
+                }
+            }
+
+            val mediaUri = runCatching {
+                resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)?.also { uri ->
+                    resolver.openOutputStream(uri)?.use { stream ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                    }
+                }
+            }.getOrNull()
+
+            val shareUri = mediaUri ?: android.net.Uri.fromFile(shareFile)
+
+            val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(android.content.Intent.EXTRA_STREAM, shareUri)
+                putExtra(
+                    android.content.Intent.EXTRA_SUBJECT,
+                    "StyleMorph AI — ${variation.photoTitle} (${variation.styleName})"
+                )
+                putExtra(
+                    android.content.Intent.EXTRA_TEXT,
+                    "Transformed '${variation.photoTitle}' with the '${variation.styleName}' AI style filter in StyleMorph!"
+                )
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            val chooserIntent = android.content.Intent.createChooser(
+                sendIntent,
+                "Share Transformed AI Image"
+            ).apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            context.startActivity(chooserIntent)
+            true
+        } catch (e: Exception) {
+            Log.e("ImageProcessingEngine", "Error sharing variation: ${e.message}")
             false
         }
     }

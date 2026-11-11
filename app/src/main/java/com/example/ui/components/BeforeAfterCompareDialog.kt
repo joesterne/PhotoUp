@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -68,6 +69,7 @@ fun BeforeAfterCompareDialog(
     onDismiss: () -> Unit,
     onSyncCloud: () -> Unit,
     onSaveToDevice: () -> Unit,
+    onShare: () -> Unit = {},
     onDelete: () -> Unit
 ) {
     var splitPosition by remember { mutableFloatStateOf(0.5f) } // 0f (all original) to 1f (all styled)
@@ -313,7 +315,7 @@ fun BeforeAfterCompareDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Actions row
+                // Primary Export & Share Actions row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -328,19 +330,43 @@ fun BeforeAfterCompareDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Download,
-                            contentDescription = null,
+                            contentDescription = "Save to Gallery",
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Save Local", fontWeight = FontWeight.Bold)
+                        Text(text = "Save to Gallery", fontWeight = FontWeight.Bold)
                     }
 
                     Button(
+                        onClick = onShare,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SecondaryCyan),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("share_variation_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share Transformed Image",
+                            tint = Color.Black,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "Share", fontWeight = FontWeight.Bold, color = Color.Black)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Secondary Cloud Sync & Delete row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
                         onClick = onSyncCloud,
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (variation.isSyncedToCloud) MaterialTheme.colorScheme.surfaceVariant else SecondaryCyan
-                        ),
                         modifier = Modifier
                             .weight(1f)
                             .testTag("sync_to_cloud_button")
@@ -348,14 +374,13 @@ fun BeforeAfterCompareDialog(
                         Icon(
                             imageVector = if (variation.isSyncedToCloud) Icons.Default.CloudDone else Icons.Default.CloudUpload,
                             contentDescription = null,
-                            tint = if (variation.isSyncedToCloud) AccentEmerald else Color.Black,
+                            tint = if (variation.isSyncedToCloud) AccentEmerald else SecondaryCyan,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (variation.isSyncedToCloud) "Synced" else "Sync Cloud",
-                            fontWeight = FontWeight.Bold,
-                            color = if (variation.isSyncedToCloud) MaterialTheme.colorScheme.onSurface else Color.Black
+                            fontWeight = FontWeight.Bold
                         )
                     }
 

@@ -37,12 +37,14 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
@@ -465,7 +467,11 @@ fun HomeScreen(
                     transformProgress = transformProgress,
                     uploadProgress = uploadProgress,
                     queueItems = queueItemStates,
-                    onCancel = { viewModel.cancelBatchProcessing() }
+                    onCancel = { viewModel.cancelBatchProcessing() },
+                    onSaveAllToGallery = { viewModel.exportAllVariationsToGallery() },
+                    onShareLatest = {
+                        variations.firstOrNull()?.let { viewModel.shareVariation(it) }
+                    }
                 )
 
                 // Mobile-only top drop shelf and top TabRow (on tablet, replaced by NavigationRail + TabletBatchStudioPane)
@@ -538,6 +544,9 @@ fun HomeScreen(
                                         photos = photos,
                                         selectedPhotoIds = selectedIds,
                                         activeStylePreset = selectedStyle,
+                                        styles = styles,
+                                        onSelectStyle = { viewModel.selectStyle(it) },
+                                        onSetPhotoSelection = { id, sel -> viewModel.setPhotoSelection(id, sel) },
                                         onToggleSelect = { photoId -> viewModel.togglePhotoSelection(photoId) },
                                         onSelectAll = { viewModel.selectAllPhotos() },
                                         onClearSelection = { viewModel.clearSelection() },
@@ -622,6 +631,9 @@ fun HomeScreen(
                                     photos = photos,
                                     selectedPhotoIds = selectedIds,
                                     activeStylePreset = selectedStyle,
+                                    styles = styles,
+                                    onSelectStyle = { viewModel.selectStyle(it) },
+                                    onSetPhotoSelection = { id, sel -> viewModel.setPhotoSelection(id, sel) },
                                     onToggleSelect = { photoId -> viewModel.togglePhotoSelection(photoId) },
                                     onSelectAll = { viewModel.selectAllPhotos() },
                                     onClearSelection = { viewModel.clearSelection() },
@@ -851,34 +863,76 @@ fun HomeScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Column {
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = "${variations.size} Generated Variations",
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                text = "Tap any card to inspect side-by-side",
+                                                text = "Tap any card to inspect side-by-side or save/share",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
 
-                                        val unsyncedCount = variations.count { !it.isSyncedToCloud }
-                                        if (unsyncedCount > 0) {
-                                            OutlinedButton(
-                                                onClick = { viewModel.syncAllUnsyncedToCloud() },
-                                                shape = RoundedCornerShape(10.dp),
-                                                modifier = Modifier.testTag("sync_all_variations_button")
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.CloudQueue,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = SecondaryCyan
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(text = "Sync ($unsyncedCount)", fontSize = 12.sp)
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (variations.isNotEmpty()) {
+                                                Button(
+                                                    onClick = { viewModel.exportAllVariationsToGallery() },
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                                    modifier = Modifier.testTag("save_all_to_gallery_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Download,
+                                                        contentDescription = "Save All to Gallery",
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(text = "Save to Gallery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
+
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        variations.firstOrNull()?.let { viewModel.shareVariation(it) }
+                                                    },
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                                    modifier = Modifier.testTag("share_latest_variation_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Share,
+                                                        contentDescription = "Share Latest Variation",
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = SecondaryCyan
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(text = "Share", fontSize = 12.sp)
+                                                }
+                                            }
+
+                                            val unsyncedCount = variations.count { !it.isSyncedToCloud }
+                                            if (unsyncedCount > 0) {
+                                                OutlinedButton(
+                                                    onClick = { viewModel.syncAllUnsyncedToCloud() },
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                                    modifier = Modifier.testTag("sync_all_variations_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.CloudQueue,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = SecondaryCyan
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(text = "Sync ($unsyncedCount)", fontSize = 12.sp)
+                                                }
                                             }
                                         }
                                     }
@@ -924,7 +978,8 @@ fun HomeScreen(
                                                     variation = variation,
                                                     onClick = { inspectVariation = variation },
                                                     onSyncCloud = { viewModel.syncSingleVariationToCloud(variation.id) },
-                                                    onSaveToDevice = { viewModel.exportVariationToGallery(variation) }
+                                                    onSaveToDevice = { viewModel.exportVariationToGallery(variation) },
+                                                    onShare = { viewModel.shareVariation(variation) }
                                                 )
                                             }
                                         }
@@ -940,6 +995,7 @@ fun HomeScreen(
                                         onClose = { inspectVariation = null },
                                         onSyncCloud = { viewModel.syncSingleVariationToCloud(variation.id) },
                                         onSaveToDevice = { viewModel.exportVariationToGallery(variation) },
+                                        onShare = { viewModel.shareVariation(variation) },
                                         onDelete = {
                                             viewModel.deleteVariation(variation.id)
                                             inspectVariation = null
@@ -953,41 +1009,90 @@ fun HomeScreen(
                         } else {
                             // Mobile Variations List
                             Column(modifier = Modifier.fillMaxSize()) {
-                                Row(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Column {
-                                        Text(
-                                            text = "${variations.size} Generated Variations",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "Tap any card to compare before / after",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "${variations.size} Generated Variations",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "Tap any card to compare before / after or export",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
+                                        val unsyncedCount = variations.count { !it.isSyncedToCloud }
+                                        if (unsyncedCount > 0) {
+                                            OutlinedButton(
+                                                onClick = { viewModel.syncAllUnsyncedToCloud() },
+                                                shape = RoundedCornerShape(10.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                modifier = Modifier.testTag("sync_all_variations_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CloudQueue,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = SecondaryCyan
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(text = "Sync ($unsyncedCount)", fontSize = 12.sp)
+                                            }
+                                        }
                                     }
 
-                                    val unsyncedCount = variations.count { !it.isSyncedToCloud }
-                                    if (unsyncedCount > 0) {
-                                        OutlinedButton(
-                                            onClick = { viewModel.syncAllUnsyncedToCloud() },
-                                            shape = RoundedCornerShape(10.dp),
-                                            modifier = Modifier.testTag("sync_all_variations_button")
+                                    if (variations.isNotEmpty()) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.CloudQueue,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = SecondaryCyan
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = "Sync ($unsyncedCount)", fontSize = 12.sp)
+                                            Button(
+                                                onClick = { viewModel.exportAllVariationsToGallery() },
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("save_all_to_gallery_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Download,
+                                                    contentDescription = "Save to Gallery",
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(text = "Save to Gallery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = {
+                                                    variations.firstOrNull()?.let { viewModel.shareVariation(it) }
+                                                },
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("share_latest_variation_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Share,
+                                                    contentDescription = "Share Transformed Image",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = SecondaryCyan
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(text = "Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
                                 }
@@ -1033,7 +1138,8 @@ fun HomeScreen(
                                                 variation = variation,
                                                 onClick = { inspectVariation = variation },
                                                 onSyncCloud = { viewModel.syncSingleVariationToCloud(variation.id) },
-                                                onSaveToDevice = { viewModel.exportVariationToGallery(variation) }
+                                                onSaveToDevice = { viewModel.exportVariationToGallery(variation) },
+                                                onShare = { viewModel.shareVariation(variation) }
                                             )
                                         }
                                     }
@@ -1446,6 +1552,7 @@ fun HomeScreen(
             onDismiss = { inspectVariation = null },
             onSyncCloud = { viewModel.syncSingleVariationToCloud(variation.id) },
             onSaveToDevice = { viewModel.exportVariationToGallery(variation) },
+            onShare = { viewModel.shareVariation(variation) },
             onDelete = {
                 viewModel.deleteVariation(variation.id)
                 inspectVariation = null

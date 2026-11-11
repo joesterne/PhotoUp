@@ -51,6 +51,8 @@ class ExampleRobolectricTest {
 
     val styleIds = styles.map { it.id }
     assertTrue(styleIds.contains("cyberpunk"))
+    assertTrue(styleIds.contains("oil_painting"))
+    assertTrue(styleIds.contains("vintage_film"))
     assertTrue(styleIds.contains("anime_ghibli"))
     assertTrue(styleIds.contains("renaissance"))
     assertTrue(styleIds.contains("pixar_3d"))
@@ -58,6 +60,11 @@ class ExampleRobolectricTest {
     assertTrue(styleIds.contains("synthwave"))
     assertTrue(styleIds.contains("pop_art"))
     assertTrue(styleIds.contains("watercolor"))
+
+    val styleNames = styles.map { it.name }
+    assertTrue(styleNames.contains("Oil Painting"))
+    assertTrue(styleNames.contains("Cyberpunk"))
+    assertTrue(styleNames.contains("Vintage Film"))
 
     styles.forEach { preset ->
       assertTrue(preset.name.isNotBlank())
@@ -150,6 +157,22 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `setPhotoSelection and applyStyleFilterToSelected update selection and active style`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.viewmodel.StyleMorphViewModel(app)
+
+    viewModel.clearSelection()
+    val firstTwoIds = viewModel.photos.value.take(2).map { it.id }
+    firstTwoIds.forEach { id -> viewModel.setPhotoSelection(id, true) }
+    assertEquals(2, viewModel.selectedPhotoIds.value.size)
+
+    val oilPainting = SamplePhotoLibrary.popularStyles.first { it.id == "oil_painting" }
+    viewModel.applyStyleFilterToSelected(oilPainting)
+    assertEquals("oil_painting", viewModel.selectedStyle.value.id)
+    viewModel.cancelBatchProcessing()
+  }
+
+  @Test
   fun `scanDeviceLocalStorage discovers image files in app internal directories`() {
     val app = ApplicationProvider.getApplicationContext<android.app.Application>()
     val testPhotoDir = java.io.File(app.filesDir, "photos")
@@ -165,5 +188,28 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertNotNull("Local storage image should be added to photos", localItem)
     assertEquals("Local Storage", localItem?.category)
   }
+
+  @Test
+  fun `exportToDeviceGallery and shareVariationImage export transformed image to local storage`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val engine = com.example.service.ImageProcessingEngine(app)
+    val sampleVariation = SamplePhotoLibrary.initialVariations.first()
+
+    val exported = kotlinx.coroutines.runBlocking {
+      engine.exportToDeviceGallery(sampleVariation)
+    }
+    assertTrue("Export to device gallery should succeed", exported)
+
+    val galleryDir = java.io.File(app.filesDir, "Pictures/StyleMorph")
+    assertTrue("Gallery directory should exist", galleryDir.exists())
+    val exportedFiles = galleryDir.listFiles()?.filter { it.name.endsWith(".png") }.orEmpty()
+    assertTrue("At least one PNG file should be written to Pictures/StyleMorph", exportedFiles.isNotEmpty())
+
+    val shared = kotlinx.coroutines.runBlocking {
+      engine.shareVariationImage(sampleVariation)
+    }
+    assertTrue("Share variation image should prepare file and launch chooser intent", shared)
+  }
 }
+
 
