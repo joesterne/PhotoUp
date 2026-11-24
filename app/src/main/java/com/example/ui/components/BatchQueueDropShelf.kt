@@ -34,7 +34,9 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Queue
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -79,6 +81,8 @@ fun BatchQueueDropShelf(
     onStartPipeline: () -> Unit,
     onClearQueue: () -> Unit,
     modifier: Modifier = Modifier,
+    isProcessing: Boolean = false,
+    processingProgress: Float = 0f,
     onOpenStyleSelection: (() -> Unit)? = null
 ) {
     val isDragging = dragDropState.isDragging
@@ -218,23 +222,77 @@ fun BatchQueueDropShelf(
 
                         Button(
                             onClick = onStartPipeline,
+                            enabled = !isProcessing,
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.testTag("start_pipeline_from_shelf_button")
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Morph (${queuedPhotos.size})",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            if (isProcessing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier
+                                        .size(15.dp)
+                                        .testTag("shelf_loading_spinner"),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${(processingProgress * 100).toInt()}%",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Morph (${queuedPhotos.size})",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
+                }
+            }
+
+            if (isProcessing) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Transforming photos with ${selectedStyle.name}...",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = SecondaryCyan
+                        )
+                        Text(
+                            text = "${(processingProgress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = SecondaryCyan
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { processingProgress.coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .testTag("shelf_progress_bar"),
+                        color = SecondaryCyan,
+                        trackColor = PrimaryViolet.copy(alpha = 0.25f)
+                    )
                 }
             }
 

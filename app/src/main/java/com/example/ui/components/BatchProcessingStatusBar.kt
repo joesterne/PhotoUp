@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -203,7 +204,72 @@ fun BatchProcessingStatusBar(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Visual Linear Progress Bar & Active Loading Spinner
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (animatedTransformProgress < 1.0f) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .testTag("batch_loading_spinner"),
+                                    strokeWidth = 2.dp,
+                                    color = PrimaryVioletLight
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Complete",
+                                    tint = AccentEmerald,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (animatedTransformProgress < 1.0f) {
+                                    "AI Transformation in Progress..."
+                                } else {
+                                    "AI Transformation Complete"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (animatedTransformProgress < 1.0f) PrimaryVioletLight else AccentEmerald
+                            )
+                        }
+                        Text(
+                            text = "${(animatedTransformProgress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = SecondaryCyan
+                        )
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { animatedTransformProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .testTag("batch_linear_progress_bar"),
+                        color = if (animatedTransformProgress >= 1.0f) AccentEmerald else PrimaryVioletLight,
+                        trackColor = PrimaryViolet.copy(alpha = 0.2f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Dual Animated Circular Progress Gauges: Transformation vs Upload
                 Row(
@@ -538,6 +604,11 @@ fun QueueItemProgressCard(
                             strokeWidth = 3.dp,
                             color = PrimaryVioletLight,
                             trackColor = PrimaryViolet.copy(alpha = 0.2f)
+                        )
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White.copy(alpha = 0.9f)
                         )
                     }
                     QueueItemStage.UPLOADING -> {

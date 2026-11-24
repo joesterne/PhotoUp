@@ -59,6 +59,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -125,6 +126,9 @@ fun LocalStoragePhotoGridView(
     onOpenStyleDialog: () -> Unit,
     modifier: Modifier = Modifier,
     styles: List<StylePreset> = SamplePhotoLibrary.popularStyles,
+    isProcessing: Boolean = false,
+    processingProgress: Float = 0f,
+    processingPhotoIds: Set<String> = emptySet(),
     onSelectStyle: ((StylePreset) -> Unit)? = null,
     onSetPhotoSelection: ((String, Boolean) -> Unit)? = null,
     onDragStart: ((PhotoItem, Offset) -> Unit)? = null,
@@ -551,9 +555,11 @@ fun LocalStoragePhotoGridView(
                 ) {
                     items(filteredPhotos, key = { it.id }) { photo ->
                         val isSelected = selectedPhotoIds.contains(photo.id)
+                        val isTransforming = isProcessing && processingPhotoIds.contains(photo.id)
                         LocalStoragePhotoCard(
                             photo = photo,
                             isSelected = isSelected,
+                            isTransforming = isTransforming,
                             isCompact = gridColumns == 3,
                             activeStyleFilterPreview = if (isSelected && isLiveFilterPreviewEnabled) activeStylePreset else null,
                             onToggleSelect = { onToggleSelect(photo.id) },
@@ -592,6 +598,52 @@ fun LocalStoragePhotoGridView(
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    if (isProcessing) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .size(14.dp)
+                                            .testTag("local_grid_progress_spinner"),
+                                        strokeWidth = 2.dp,
+                                        color = SecondaryCyan
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "AI Transformation in Progress...",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SecondaryCyan
+                                    )
+                                }
+                                Text(
+                                    text = "${(processingProgress * 100).toInt()}%",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = PrimaryVioletLight
+                                )
+                            }
+                            LinearProgressIndicator(
+                                progress = { processingProgress.coerceIn(0f, 1f) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(5.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .testTag("local_grid_progress_bar"),
+                                color = SecondaryCyan,
+                                trackColor = PrimaryViolet.copy(alpha = 0.25f)
+                            )
+                        }
+                    }
+
                     // Quick Predefined AI Style Transformation Filters Strip (e.g. Cyberpunk, Oil Painting, Vintage Film)
                     LazyRow(
                         modifier = Modifier
@@ -728,24 +780,42 @@ fun LocalStoragePhotoGridView(
                                 onClick = {
                                     onStartBatchProcess(selectedPhotoIds.toList(), activeStylePreset)
                                 },
+                                enabled = !isProcessing,
                                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
                                 shape = RoundedCornerShape(14.dp),
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                                 modifier = Modifier.testTag("local_grid_process_batch_button")
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = AccentAmber,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Batch Morph",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                                if (isProcessing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .testTag("local_grid_loading_spinner"),
+                                        strokeWidth = 2.dp,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Transforming ${(processingProgress * 100).toInt()}%",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = AccentAmber,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Batch Morph",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
@@ -789,6 +859,7 @@ fun LocalStoragePhotoCard(
     onDrag: ((Offset) -> Unit)? = null,
     onDragEnd: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    isTransforming: Boolean = false,
     activeStyleFilterPreview: StylePreset? = null
 ) {
     var cardBoundsInWindow by remember { mutableStateOf(Rect.Zero) }
@@ -895,6 +966,40 @@ fun LocalStoragePhotoCard(
                             )
                         )
                 )
+            }
+
+            // Active AI Transformation Spinner Overlay when photo is being morphed
+            if (isTransforming) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.58f))
+                        .testTag("local_photo_processing_overlay_${photo.id}"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(30.dp),
+                            strokeWidth = 3.dp,
+                            color = SecondaryCyan
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = PrimaryViolet.copy(alpha = 0.9f)
+                        ) {
+                            Text(
+                                text = "Styling...",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             // Top Badges Row: Quality Heuristic & Selection Toggle

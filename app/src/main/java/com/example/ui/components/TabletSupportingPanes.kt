@@ -43,8 +43,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -104,7 +106,9 @@ fun TabletBatchStudioPane(
     onStartPipeline: () -> Unit,
     onOpenAIProviderSettings: () -> Unit,
     onOpenStorageSettings: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isProcessing: Boolean = false,
+    processingProgress: Float = 0f
 ) {
     Surface(
         modifier = modifier
@@ -261,6 +265,8 @@ fun TabletBatchStudioPane(
                 onReorderQueue = onReorderQueue,
                 onStartPipeline = onStartPipeline,
                 onClearQueue = onClearQueue,
+                isProcessing = isProcessing,
+                processingProgress = processingProgress,
                 onOpenStyleSelection = onOpenStyleDialog,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -333,10 +339,64 @@ fun TabletBatchStudioPane(
                 }
             }
 
+            if (isProcessing) {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .testTag("tablet_studio_loading_spinner"),
+                                    strokeWidth = 2.dp,
+                                    color = SecondaryCyan
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "AI Transformation in Progress...",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SecondaryCyan
+                                )
+                            }
+                            Text(
+                                text = "${(processingProgress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PrimaryVioletLight
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { processingProgress.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .testTag("tablet_studio_progress_bar"),
+                            color = SecondaryCyan,
+                            trackColor = PrimaryViolet.copy(alpha = 0.25f)
+                        )
+                    }
+                }
+            }
+
             // Prominent Execution Button
             Button(
                 onClick = onStartPipeline,
-                enabled = queuedPhotos.isNotEmpty(),
+                enabled = queuedPhotos.isNotEmpty() && !isProcessing,
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryViolet),
                 modifier = Modifier
@@ -344,14 +404,29 @@ fun TabletBatchStudioPane(
                     .height(52.dp)
                     .testTag("tablet_start_batch_button")
             ) {
-                Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = AccentAmber)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (queuedPhotos.isNotEmpty()) "Morph ${queuedPhotos.size} Photos with ${selectedStyle.name}" else "Select Photos to Morph",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = Color.White
-                )
+                if (isProcessing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Transforming... ${(processingProgress * 100).toInt()}%",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = Color.White
+                    )
+                } else {
+                    Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = AccentAmber)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (queuedPhotos.isNotEmpty()) "Morph ${queuedPhotos.size} Photos with ${selectedStyle.name}" else "Select Photos to Morph",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = Color.White
+                    )
+                }
             }
         }
     }

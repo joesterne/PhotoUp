@@ -210,6 +210,25 @@ class ExampleRobolectricTest {
     }
     assertTrue("Share variation image should prepare file and launch chooser intent", shared)
   }
+
+  @Test
+  fun `startBatchProcessing updates progress indicators and queue item stages`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.viewmodel.StyleMorphViewModel(app)
+    val style = SamplePhotoLibrary.popularStyles.first { it.id == "cyberpunk" }
+    val targetIds = viewModel.photos.value.take(2).map { it.id }
+
+    viewModel.startBatchProcessing(targetIds, style)
+
+    // Allow dispatcher to enter coroutine and initialize processing state
+    Thread.sleep(50)
+    org.junit.Assert.assertTrue("isProcessing should be true while batch runs", viewModel.isProcessing.value)
+    assertEquals(2, viewModel.queueItemStates.value.size)
+
+    viewModel.cancelBatchProcessing()
+    org.junit.Assert.assertFalse("isProcessing should be false after cancellation", viewModel.isProcessing.value)
+  }
 }
+
 
 

@@ -51,12 +51,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationRail
@@ -94,6 +96,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.PhotoItem
+import com.example.data.QueueItemStage
 import com.example.data.VariationResult
 import com.example.ui.components.AIProviderSheet
 import com.example.ui.components.BatchProcessingStatusBar
@@ -178,6 +181,12 @@ fun HomeScreen(
 
     val dragDropState = rememberDragDropState()
     val queuedPhotos = photos.filter { selectedIds.contains(it.id) }
+    val transformingPhotoIds = remember(queueItemStates) {
+        queueItemStates
+            .filter { it.stage == QueueItemStage.TRANSFORMING }
+            .map { it.photoId }
+            .toSet()
+    }
 
     val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
     val tabTitles = listOf("Photo Library", "Styles", "Variations (${variations.size})", "Batch Queue")
@@ -280,6 +289,37 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    if (isProcessing) {
+                        Surface(
+                            modifier = Modifier
+                                .padding(end = 6.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable { viewModel.selectTab(3) }
+                                .testTag("topbar_processing_indicator"),
+                            shape = RoundedCornerShape(20.dp),
+                            color = PrimaryViolet.copy(alpha = 0.22f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SecondaryCyan.copy(alpha = 0.6f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = SecondaryCyan
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${(transformProgress * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SecondaryCyan
+                                )
+                            }
+                        }
+                    }
+
                     // AI Provider badge chip
                     Surface(
                         modifier = Modifier
@@ -341,7 +381,11 @@ fun HomeScreen(
             if (selectedIds.isNotEmpty() && selectedTabIndex == 0) {
                 FloatingActionButton(
                     onClick = {
-                        viewModel.startBatchProcessing(selectedIds.toList(), selectedStyle)
+                        if (!isProcessing) {
+                            viewModel.startBatchProcessing(selectedIds.toList(), selectedStyle)
+                        } else {
+                            viewModel.selectTab(3)
+                        }
                     },
                     containerColor = PrimaryViolet,
                     contentColor = Color.White,
@@ -351,12 +395,27 @@ fun HomeScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Morph ${selectedIds.size} Photos",
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (isProcessing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .testTag("fab_loading_spinner"),
+                                strokeWidth = 2.2.dp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Transforming ${(transformProgress * 100).toInt()}%",
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Morph ${selectedIds.size} Photos",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -486,6 +545,8 @@ fun HomeScreen(
                             viewModel.startBatchProcessing(selectedIds.toList(), selectedStyle)
                         },
                         onClearQueue = { viewModel.clearSelection() },
+                        isProcessing = isProcessing,
+                        processingProgress = transformProgress,
                         onOpenStyleSelection = { showStyleSelectionDialog = true },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                     )
@@ -545,6 +606,9 @@ fun HomeScreen(
                                         selectedPhotoIds = selectedIds,
                                         activeStylePreset = selectedStyle,
                                         styles = styles,
+                                        isProcessing = isProcessing,
+                                        processingProgress = transformProgress,
+                                        processingPhotoIds = transformingPhotoIds,
                                         onSelectStyle = { viewModel.selectStyle(it) },
                                         onSetPhotoSelection = { id, sel -> viewModel.setPhotoSelection(id, sel) },
                                         onToggleSelect = { photoId -> viewModel.togglePhotoSelection(photoId) },
@@ -610,6 +674,8 @@ fun HomeScreen(
                                     },
                                     onOpenAIProviderSettings = { showAIProviderSheet = true },
                                     onOpenStorageSettings = { showStorageSheet = true },
+                                    isProcessing = isProcessing,
+                                    processingProgress = transformProgress,
                                     modifier = Modifier
                                         .weight(0.7f)
                                         .fillMaxHeight()
@@ -632,6 +698,9 @@ fun HomeScreen(
                                     selectedPhotoIds = selectedIds,
                                     activeStylePreset = selectedStyle,
                                     styles = styles,
+                                    isProcessing = isProcessing,
+                                    processingProgress = transformProgress,
+                                    processingPhotoIds = transformingPhotoIds,
                                     onSelectStyle = { viewModel.selectStyle(it) },
                                     onSetPhotoSelection = { id, sel -> viewModel.setPhotoSelection(id, sel) },
                                     onToggleSelect = { photoId -> viewModel.togglePhotoSelection(photoId) },
@@ -1218,6 +1287,49 @@ fun HomeScreen(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
 
+                                                Spacer(modifier = Modifier.height(10.dp))
+
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        if (transformProgress < 1.0f) {
+                                                            CircularProgressIndicator(
+                                                                modifier = Modifier
+                                                                    .size(14.dp)
+                                                                    .testTag("tab_loading_spinner"),
+                                                                strokeWidth = 2.dp,
+                                                                color = PrimaryVioletLight
+                                                            )
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                        }
+                                                        Text(
+                                                            text = "Overall AI Transformation Progress",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = "${(transformProgress * 100).toInt()}%",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = SecondaryCyan
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                LinearProgressIndicator(
+                                                    progress = { transformProgress.coerceIn(0f, 1f) },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(7.dp)
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .testTag("tab_linear_progress_bar"),
+                                                    color = PrimaryVioletLight,
+                                                    trackColor = PrimaryViolet.copy(alpha = 0.2f)
+                                                )
+
                                                 Spacer(modifier = Modifier.height(12.dp))
 
                                                 Row(
@@ -1437,6 +1549,49 @@ fun HomeScreen(
                                                 text = activeTask?.currentStepDescription ?: "",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+
+                                            Spacer(modifier = Modifier.height(10.dp))
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    if (transformProgress < 1.0f) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier
+                                                                .size(14.dp)
+                                                                .testTag("tab_loading_spinner"),
+                                                            strokeWidth = 2.dp,
+                                                            color = PrimaryVioletLight
+                                                        )
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                    }
+                                                    Text(
+                                                        text = "Overall AI Transformation Progress",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "${(transformProgress * 100).toInt()}%",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = SecondaryCyan
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            LinearProgressIndicator(
+                                                progress = { transformProgress.coerceIn(0f, 1f) },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(7.dp)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .testTag("tab_linear_progress_bar"),
+                                                color = PrimaryVioletLight,
+                                                trackColor = PrimaryViolet.copy(alpha = 0.2f)
                                             )
 
                                             Spacer(modifier = Modifier.height(10.dp))
